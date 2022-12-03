@@ -1,6 +1,6 @@
 Package: DominoDataR
 Title: Domino Data R API
-Version: 0.0.1
+Version: 0.0.1.9000
 Authors@R: 
     person("Gabriel", "Haim", , "gabriel.haim@dominodatalab.com", role = c("aut", "cre"))
 Description: Domino Data API for interacting with Data features (Data Sources).

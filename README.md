@@ -15,11 +15,11 @@ install.packages("remotes")
 remotes::install_github("dominodatalab/DominoDataR")
 ```
 
-The Domino Data R library depends on the [python
-library](https://pypi.org/project/dominodatalab-data/). Make sure it is
-installed in your environment or use the following command:
+The Domino Data R library depends on the [Python
+library](https://pypi.org/project/dominodatalab-data/). On unix systems this should be
+installed automatically when `{DominoDataR}` is installed. You can also
+install it manually:
 
 ``` r
-library(reticulate)
-py_install("dominodatalab-data")
+DominoDataR::py_domino_data_install()
 ```

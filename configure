@@ -1,0 +1,6 @@
+#!/bin/sh
+
+set -x
+set -e
+
+${R_HOME}/bin/Rscript inst/scripts/python-setup.R
