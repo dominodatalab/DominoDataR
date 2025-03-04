@@ -4,12 +4,16 @@
 \alias{datasource_client}
 \title{Create a client to Domino datasources}
 \usage{
-datasource_client(api_key = NULL, token_file = NULL)
+datasource_client(api_key = NULL, token_file = NULL, token_url = NULL, token =  NULL)
 }
 \arguments{
 \item{api_key}{string key to override the environment variable}
 
 \item{token_file}{location of file to read token from}
+
+\item{token_url}{url of the location to read the token from}
+
+\item{token}{token to be used to authenticate}
 }
 \value{
 A \code{domino_data.data_sources.DataSourceClient}.

@@ -19,15 +19,17 @@
 #'
 #' @param api_key string key to override the environment variable
 #' @param token_file location of file to read token from
+#' @param token_url url of the location to read the token from
+#' @param token token to be used to authenticate
 #'
 #' @return A `domino_data.data_sources.DataSourceClient`.
 #' @export
-datasource_client <- function(api_key = NULL, token_file = NULL) {
+datasource_client <- function(api_key = NULL, token_file = NULL, token_url = NULL, token =  NULL) {
   envvar <- c("DOMINO_CLIENT_SOURCE" = "R")
-  if (!is.null(api_key) || !is.null(token_file)) {
+  if (!is.null(api_key) || !is.null(token_file) || !is.null(token_url) || !is.null(token)) {
     client <- withr::with_envvar(
       new = envvar,
-      domino_data_sources$DataSourceClient(api_key, token_file)
+      domino_data_sources$DataSourceClient(api_key, token_file, token_url, token)
     )
   } else {
     client <- withr::with_envvar(

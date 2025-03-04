@@ -13,5 +13,7 @@ test_that("client can be initialized", {
 
   expect_no_error(DominoDataR::datasource_client(api_key = "API_KEY"))
   expect_no_error(DominoDataR::datasource_client(token_file = token_file))
+  expect_no_error(DominoDataR::datasource_client(token_url = "TOKEN_URL"))
+  expect_no_error(DominoDataR::datasource_client(token = "TOKEN"))
   expect_no_error(DominoDataR::datasource_client())
 })
