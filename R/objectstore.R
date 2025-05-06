@@ -81,7 +81,7 @@ get_object <- function(client,
 #' @param file File path to save object at. Defaults to the object base name.
 #' @param override Configuration values to override ([add_override()])
 #'
-#' @return Raw vector representation of the object
+#' @return File path where the object was saved
 #' @export
 save_object <- function(client,
                         datasource,
