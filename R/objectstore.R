@@ -23,7 +23,7 @@
 #' @param override Configuration values to override ([add_override()])
 #' @param page_size Number of objects to fetch
 #'
-#' @return A vector or string keys
+#' @return A string vector of keys
 #' @export
 list_keys <- function(client,
                       datasource,
