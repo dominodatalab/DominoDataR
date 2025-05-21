@@ -16,7 +16,7 @@ query(client, datasource, query, override = list())
 \item{override}{Configuration values to override (\code{\link[=add_override]{add_override()}})}
 }
 \value{
-An \link[arrow:Table]{arrow::Table}
+An \link[arrow:Table-class]{arrow::Table}
 }
 \description{
 Query a datasource and returns an arrow Table
