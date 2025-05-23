@@ -24,10 +24,22 @@ Create a fluent query interface for a table
 \examples{
 \dontrun{
   client <- datasource_client()
+  
+  # Get all users
   all_users <- table_query(client, "my_datasource", "users")$all()
+  
+  # Chained operations
   active_users <- table_query(client, "my_datasource", "users")$
     filter("is_active = TRUE")$
+    select("name, age")$
+    order_by("age DESC")$
     all()
+    
+  # Get first result
+  first_user <- table_query(client, "my_datasource", "users")$first()
+  
+  # Count results
+  user_count <- table_query(client, "my_datasource", "users")$count()
 }
 }
 \seealso{

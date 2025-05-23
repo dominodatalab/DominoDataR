@@ -24,6 +24,11 @@ Get type mappings
   client <- datasource_client()
   mappings <- get_type_mappings(client, "my_datasource")
   print(mappings)
+  
+  # View specific type mapping
+  if ("str" \%in\% names(mappings)) {
+    cat("String type maps to:", mappings[["str"]], "\n")
+  }
 }
 }
 \seealso{

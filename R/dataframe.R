@@ -8,6 +8,7 @@
 #' @param chunk_size Number of rows to insert in each batch for large data frames (default: 10000)
 #' @param handle_mixed_types If TRUE (default), detect and handle mixed types in columns
 #' @param force If TRUE, attempt to append data even if schema compatibility issues are detected (default: FALSE)
+#' @param verbose If TRUE, print progress messages (default: FALSE)
 #' @param override Configuration values to override ([add_override()])
 #'
 #' @return Invisible NULL
@@ -18,10 +19,38 @@
 #'   client <- datasource_client()
 #'   df <- data.frame(id = 1:3, name = c("Alice", "Bob", "Charlie"))
 #'   write_dataframe(client, "my_datasource", "users", df, if_table_exists = "replace")
+#'   
+#'   # With verbose output
+#'   write_dataframe(client, "my_datasource", "users", df, verbose = TRUE)
 #' }
 write_dataframe <- function(client, datasource, table_name, data_frame, 
                            if_table_exists = 'fail', chunk_size = 10000, 
-                           handle_mixed_types = TRUE, force = FALSE, override = list()) {
+                           handle_mixed_types = TRUE, force = FALSE, 
+                           verbose = FALSE, override = list()) {
+  
+  # Input validation
+  if (!is.data.frame(data_frame)) {
+    stop("data_frame must be a data.frame object")
+  }
+  
+  if (nrow(data_frame) == 0) {
+    stop("data_frame cannot be empty")
+  }
+  
+  if (!is.character(table_name) || length(table_name) != 1) {
+    stop("table_name must be a single character string")
+  }
+  
+  valid_options <- c('fail', 'replace', 'append', 'truncate')
+  if (!if_table_exists %in% valid_options) {
+    stop(paste("if_table_exists must be one of:", paste(valid_options, collapse = ", ")))
+  }
+  
+  if (verbose) {
+    cat("Writing", nrow(data_frame), "rows to table:", table_name, "\n")
+    cat("Mode:", if_table_exists, "\n")
+  }
+  
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
   
@@ -32,15 +61,28 @@ write_dataframe <- function(client, datasource, table_name, data_frame,
   pandas <- reticulate::import("pandas")
   py_df <- pandas$DataFrame(data_frame)
   
+  if (verbose) {
+    cat("Converted R data.frame to pandas DataFrame\n")
+    cat("Calling Python write_dataframe method...\n")
+  }
+  
   # Call the Python write_dataframe method
-  ds_obj$write_dataframe(
-    table_name = table_name,
-    dataframe = py_df,
-    if_table_exists = if_table_exists,
-    chunksize = as.integer(chunk_size),
-    handle_mixed_types = handle_mixed_types,
-    force = force
-  )
+  tryCatch({
+    ds_obj$write_dataframe(
+      table_name = table_name,
+      dataframe = py_df,
+      if_table_exists = if_table_exists,
+      chunksize = as.integer(chunk_size),
+      handle_mixed_types = handle_mixed_types,
+      force = force
+    )
+    
+    if (verbose) {
+      cat("Write operation completed successfully\n")
+    }
+  }, error = function(e) {
+    stop(paste("Failed to write dataframe to table:", e$message))
+  })
   
   invisible(NULL)
 }
@@ -58,12 +100,30 @@ write_dataframe <- function(client, datasource, table_name, data_frame,
 #' @examples
 #' \dontrun{
 #'   client <- datasource_client()
+#'   
+#'   # Get all users
 #'   all_users <- table_query(client, "my_datasource", "users")$all()
+#'   
+#'   # Chained operations
 #'   active_users <- table_query(client, "my_datasource", "users")$
 #'     filter("is_active = TRUE")$
+#'     select("name, age")$
+#'     order_by("age DESC")$
 #'     all()
+#'     
+#'   # Get first result
+#'   first_user <- table_query(client, "my_datasource", "users")$first()
+#'   
+#'   # Count results
+#'   user_count <- table_query(client, "my_datasource", "users")$count()
 #' }
 table_query <- function(client, datasource, table_name, override = list()) {
+  
+  # Input validation
+  if (!is.character(table_name) || length(table_name) != 1) {
+    stop("table_name must be a single character string")
+  }
+  
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
   
@@ -77,53 +137,80 @@ table_query <- function(client, datasource, table_name, override = list()) {
   result <- list(
     # Method to select columns
     select = function(columns) {
+      if (!is.character(columns) || length(columns) != 1) {
+        stop("columns must be a single character string (comma-separated column names)")
+      }
       query_obj$select(columns)
       return(result)
     },
     
     # Method to filter results
     filter = function(condition) {
+      if (!is.character(condition) || length(condition) != 1) {
+        stop("condition must be a single character string containing SQL WHERE condition")
+      }
       query_obj$filter(condition)
       return(result)
     },
     
     # Method to order results
     order_by = function(order) {
+      if (!is.character(order) || length(order) != 1) {
+        stop("order must be a single character string containing SQL ORDER BY expression")
+      }
       query_obj$order_by(order)
       return(result)
     },
     
     # Method to limit results
     limit = function(limit) {
+      if (!is.numeric(limit) || length(limit) != 1 || limit < 1) {
+        stop("limit must be a positive integer")
+      }
       query_obj$limit(as.integer(limit))
       return(result)
     },
     
     # Method to set offset
     offset = function(offset) {
+      if (!is.numeric(offset) || length(offset) != 1 || offset < 0) {
+        stop("offset must be a non-negative integer")
+      }
       query_obj$offset(as.integer(offset))
       return(result)
     },
     
     # Method to execute the query and return all results
     all = function() {
-      py_result <- query_obj$all()
-      return(reticulate::py_to_r(py_result))
+      tryCatch({
+        py_result <- query_obj$all()
+        return(reticulate::py_to_r(py_result))
+      }, error = function(e) {
+        stop(paste("Failed to execute query:", e$message))
+      })
     },
     
     # Method to get the first result
     first = function() {
-      py_result <- query_obj$first()
-      if (!reticulate::py_is_null_xptr(py_result)) {
-        return(reticulate::py_to_r(py_result))
-      } else {
-        return(NULL)
-      }
+      tryCatch({
+        py_result <- query_obj$first()
+        if (!reticulate::py_is_null_xptr(py_result)) {
+          return(reticulate::py_to_r(py_result))
+        } else {
+          return(NULL)
+        }
+      }, error = function(e) {
+        stop(paste("Failed to get first result:", e$message))
+      })
     },
     
     # Method to count results
     count = function() {
-      return(as.integer(query_obj$count()))
+      tryCatch({
+        return(as.integer(query_obj$count()))
+      }, error = function(e) {
+        stop(paste("Failed to count results:", e$message))
+      })
     }
   )
   
@@ -144,9 +231,24 @@ table_query <- function(client, datasource, table_name, override = list()) {
 #' @examples
 #' \dontrun{
 #'   client <- datasource_client()
+#'   
+#'   # Register a Date type mapping
 #'   register_type(client, "my_datasource", "Date", "DATE")
+#'   
+#'   # Register a custom numeric precision
+#'   register_type(client, "my_datasource", "numeric", "NUMERIC(10,2)")
 #' }
 register_type <- function(client, datasource, r_type, sql_type, override = list()) {
+  
+  # Input validation
+  if (!is.character(r_type) || length(r_type) != 1) {
+    stop("r_type must be a single character string")
+  }
+  
+  if (!is.character(sql_type) || length(sql_type) != 1) {
+    stop("sql_type must be a single character string")
+  }
+  
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
   
@@ -170,39 +272,17 @@ register_type <- function(client, datasource, r_type, sql_type, override = list(
   # Get Python type equivalent
   py_type <- py_types[[r_type]]
   if (is.null(py_type)) {
-    stop(paste0("Unsupported R type: ", r_type))
+    available_types <- paste(names(py_types), collapse = ", ")
+    stop(paste0("Unsupported R type: '", r_type, "'. Available types: ", available_types))
   }
   
   # Register the type mapping
-  ds_obj$register_type(py_type, sql_type)
-  
-  invisible(NULL)
-}
-
-#' Enable SQL debugging
-#'
-#' @param client As returned by [datasource_client()]
-#' @param datasource The name of the datasource
-#' @param enabled If TRUE (default), enable SQL debugging; if FALSE, disable it
-#' @param override Configuration values to override ([add_override()])
-#'
-#' @return Invisible NULL
-#' @export
-#' @seealso \code{\link{query}} for executing raw SQL queries, \code{\link{table_query}} for a fluent query interface
-#' @examples
-#' \dontrun{
-#'   client <- datasource_client()
-#'   enable_sql_debug(client, "my_datasource", TRUE)
-#' }
-enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list()) {
-  # Get the datasource object
-  ds_obj <- client$get_datasource(datasource)
-  
-  # Add credentials
-  credentials <- add_credentials(ds_obj$auth_type, override)
-  
-  # Enable or disable SQL debugging
-  ds_obj$enable_sql_debug(enabled)
+  tryCatch({
+    ds_obj$register_type(py_type, sql_type)
+    cat("Successfully registered type mapping:", r_type, "->", sql_type, "\n")
+  }, error = function(e) {
+    stop(paste("Failed to register type mapping:", e$message))
+  })
   
   invisible(NULL)
 }
@@ -221,8 +301,14 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
 #'   client <- datasource_client()
 #'   mappings <- get_type_mappings(client, "my_datasource")
 #'   print(mappings)
+#'   
+#'   # View specific type mapping
+#'   if ("str" %in% names(mappings)) {
+#'     cat("String type maps to:", mappings[["str"]], "\n")
+#'   }
 #' }
 get_type_mappings <- function(client, datasource, override = list()) {
+  
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
   
@@ -230,8 +316,91 @@ get_type_mappings <- function(client, datasource, override = list()) {
   credentials <- add_credentials(ds_obj$auth_type, override)
   
   # Get type mappings
-  mappings <- ds_obj$get_type_mappings()
+  tryCatch({
+    mappings <- ds_obj$get_type_mappings()
+    
+    # Convert to R list
+    result <- reticulate::py_to_r(mappings)
+    
+    # Ensure it's a named list
+    if (!is.list(result)) {
+      result <- as.list(result)
+    }
+    
+    return(result)
+  }, error = function(e) {
+    stop(paste("Failed to get type mappings:", e$message))
+  })
+}
+
+#' Enable SQL debugging
+#'
+#' @param client As returned by [datasource_client()]
+#' @param datasource The name of the datasource
+#' @param enabled If TRUE (default), enable SQL debugging; if FALSE, disable it
+#' @param override Configuration values to override ([add_override()])
+#'
+#' @return Invisible NULL
+#' @export
+#' @seealso \code{\link{query}} for executing raw SQL queries, \code{\link{table_query}} for a fluent query interface
+#' @examples
+#' \dontrun{
+#'   client <- datasource_client()
+#'   
+#'   # Enable SQL debugging
+#'   enable_sql_debug(client, "my_datasource", TRUE)
+#'   
+#'   # Now SQL statements will be logged
+#'   result <- table_query(client, "my_datasource", "users")$
+#'     filter("age > 30")$
+#'     all()
+#'   
+#'   # Disable SQL debugging
+#'   enable_sql_debug(client, "my_datasource", FALSE)
+#' }
+enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list()) {
   
-  # Convert to R list
-  return(reticulate::py_to_r(mappings))
+  # Input validation
+  if (!is.logical(enabled) || length(enabled) != 1) {
+    stop("enabled must be TRUE or FALSE")
+  }
+  
+  # Get the datasource object
+  ds_obj <- client$get_datasource(datasource)
+  
+  # Add credentials
+  credentials <- add_credentials(ds_obj$auth_type, override)
+  
+  # Enable or disable SQL debugging
+  tryCatch({
+    ds_obj$enable_sql_debug(enabled)
+    
+    if (enabled) {
+      # Configure Python logging to be visible in R
+      logging <- reticulate::import("logging")
+      
+      # Set logging level to DEBUG for the domino_data logger
+      domino_logger <- logging$getLogger("domino_data.data_sources")
+      domino_logger$setLevel(logging$DEBUG)
+      
+      # Ensure we have a handler that outputs to stdout (visible in R)
+      if (length(domino_logger$handlers) == 0) {
+        handler <- logging$StreamHandler()
+        formatter <- logging$Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        handler$setFormatter(formatter)
+        domino_logger$addHandler(handler)
+      }
+      
+      # Set the root logger level as well
+      logging$getLogger()$setLevel(logging$DEBUG)
+      
+      cat("SQL debugging enabled for R session\n")
+    } else {
+      cat("SQL debugging disabled\n")
+    }
+  }, error = function(e) {
+    stop(paste("Failed to configure SQL debugging:", e$message))
+  })
+  
+  invisible(NULL)
 }

@@ -13,6 +13,7 @@ write_dataframe(
   chunk_size = 10000,
   handle_mixed_types = TRUE,
   force = FALSE,
+  verbose = FALSE,
   override = list()
 )
 }
@@ -33,6 +34,8 @@ write_dataframe(
 
 \item{force}{If TRUE, attempt to append data even if schema compatibility issues are detected (default: FALSE)}
 
+\item{verbose}{If TRUE, print progress messages (default: FALSE)}
+
 \item{override}{Configuration values to override (\code{\link[=add_override]{add_override()}})}
 }
 \value{
@@ -46,6 +49,9 @@ Write a data frame to a table in the datasource
   client <- datasource_client()
   df <- data.frame(id = 1:3, name = c("Alice", "Bob", "Charlie"))
   write_dataframe(client, "my_datasource", "users", df, if_table_exists = "replace")
+  
+  # With verbose output
+  write_dataframe(client, "my_datasource", "users", df, verbose = TRUE)
 }
 }
 \seealso{

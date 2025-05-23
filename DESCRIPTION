@@ -1,6 +1,6 @@
 Package: DominoDataR
 Title: 'Domino Data R SDK'
-Version: 0.2.4
+Version: 0.2.5
 Authors@R:
     person("Gabriel", "Haim", , "gabriel.haim@dominodatalab.com", role = c("aut", "cre"))
 Description: A wrapper on top of the 'Domino Data Python SDK' library. It lets 
