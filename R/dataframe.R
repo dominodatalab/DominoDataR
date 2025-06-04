@@ -275,6 +275,94 @@ table_query <- function(client, datasource, table_name, override = list()) {
   return(result)
 }
 
+#' Wrap a query for database passthrough
+#'
+#' @param client As returned by [datasource_client()]
+#' @param datasource The name of the datasource
+#' @param query SQL query to wrap
+#' @param override Configuration values to override ([add_override()])
+#'
+#' @return Wrapped query string
+#' @export
+#' @seealso \code{\link{passthrough_query}} for executing wrapped queries directly, \code{\link{query}} for standard queries
+#' @examples
+#' \dontrun{
+#'   client <- datasource_client()
+#'   
+#'   # Wrap a complex query for inspection
+#'   complex_query <- "SELECT * FROM users u JOIN orders o ON u.id = o.user_id ORDER BY u.created_date"
+#'   wrapped <- wrap_passthrough_query(client, "<data_source>", complex_query)
+#'   print(wrapped)
+#'   
+#'   # Then execute manually
+#'   result <- query(client, "<data_source>", wrapped)
+#' }
+wrap_passthrough_query <- function(client, datasource, query, override = list()) {
+  
+  # Input validation
+  if (!is.character(query) || length(query) != 1) {
+    stop("query must be a single character string")
+  }
+  
+  # Get the datasource object
+  ds_obj <- client$get_datasource(datasource)
+  
+  # Add credentials
+  credentials <- add_credentials(ds_obj$auth_type, override)
+  
+  # Wrap the query
+  tryCatch({
+    wrapped <- ds_obj$wrap_passthrough_query(query)
+    return(wrapped)
+  }, error = function(e) {
+    stop(paste("Failed to wrap query:", e$message))
+  })
+}
+
+#' Execute a query with database passthrough wrapper
+#'
+#' @param client As returned by [datasource_client()]
+#' @param datasource The name of the datasource
+#' @param query SQL query to execute with passthrough
+#' @param override Configuration values to override ([add_override()])
+#'
+#' @return Query result
+#' @export
+#' @seealso \code{\link{wrap_passthrough_query}} for getting wrapped query strings, \code{\link{query}} for standard queries, \code{\link{table_query}} for fluent queries
+#' @examples
+#' \dontrun{
+#'   client <- datasource_client()
+#'   
+#'   # Execute complex query with passthrough
+#'   complex_query <- "SELECT * FROM users u JOIN orders o ON u.id = o.user_id ORDER BY u.created_date"
+#'   result <- passthrough_query(client, "<data_source>", complex_query)
+#'   
+#'   # Use data source-specific functions
+#'   db_specific <- "SELECT user_id, REGEXP_EXTRACT(email, '@(.*)') as domain FROM users"
+#'   result <- passthrough_query(client, "<data_source>", db_specific)
+#' }
+passthrough_query <- function(client, datasource, query, override = list()) {
+  
+  # Input validation
+  if (!is.character(query) || length(query) != 1) {
+    stop("query must be a single character string")
+  }
+  
+  # Get the datasource object
+  ds_obj <- client$get_datasource(datasource)
+  
+  # Add credentials
+  credentials <- add_credentials(ds_obj$auth_type, override)
+  
+  # Execute passthrough query
+  tryCatch({
+    result <- ds_obj$passthrough_query(query)
+    return(reticulate::py_to_r(result))
+  }, error = function(e) {
+    stop(paste("Failed to execute passthrough query:", e$message))
+  })
+}
+
 #' Register a custom type mapping
 #'
 #' @param client As returned by [datasource_client()]
