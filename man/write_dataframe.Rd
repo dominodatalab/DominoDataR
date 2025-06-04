@@ -10,7 +10,7 @@ write_dataframe(
   table_name,
   data_frame,
   if_table_exists = "fail",
-  chunk_size = 10000,
+  chunk_size = 20000,
   handle_mixed_types = TRUE,
   force = FALSE,
   verbose = FALSE,
@@ -28,7 +28,7 @@ write_dataframe(
 
 \item{if_table_exists}{Action to take if the table already exists: 'fail' (default), 'replace', 'append', or 'truncate'}
 
-\item{chunk_size}{Number of rows to insert in each batch for large data frames (default: 10000)}
+\item{chunk_size}{Number of rows to insert in each batch for large data frames (default: 20000)}
 
 \item{handle_mixed_types}{If TRUE (default), detect and handle mixed types in columns}
 

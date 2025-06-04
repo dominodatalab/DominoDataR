@@ -3,6 +3,7 @@
 export(add_credentials)
 export(add_override)
 export(datasource_client)
+export(drop_table_quietly)
 export(enable_sql_debug)
 export(get_object)
 export(get_type_mappings)

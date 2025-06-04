@@ -5,7 +5,7 @@
 #' @param table_name Name of the table to write to
 #' @param data_frame Data frame containing the data to write
 #' @param if_table_exists Action to take if the table already exists: 'fail' (default), 'replace', 'append', or 'truncate'
-#' @param chunk_size Number of rows to insert in each batch for large data frames (default: 10000)
+#' @param chunk_size Number of rows to insert in each batch for large data frames (default: 20000)
 #' @param handle_mixed_types If TRUE (default), detect and handle mixed types in columns
 #' @param force If TRUE, attempt to append data even if schema compatibility issues are detected (default: FALSE)
 #' @param verbose If TRUE, print progress messages (default: FALSE)
@@ -24,7 +24,7 @@
 #'   write_dataframe(client, "my_datasource", "users", df, verbose = TRUE)
 #' }
 write_dataframe <- function(client, datasource, table_name, data_frame, 
-                           if_table_exists = 'fail', chunk_size = 10000, 
+                           if_table_exists = 'fail', chunk_size = 20000, 
                            handle_mixed_types = TRUE, force = FALSE, 
                            verbose = FALSE, override = list()) {
   
@@ -51,6 +51,13 @@ write_dataframe <- function(client, datasource, table_name, data_frame,
     cat("Mode:", if_table_exists, "\n")
   }
   
+  # Convert factors to characters and difftime to numeric
+  data_frame <- as.data.frame(lapply(data_frame, function(col) {
+    if (is.factor(col)) return(as.character(col))
+    if (inherits(col, "difftime")) return(as.numeric(col))
+    col
+  }), stringsAsFactors = FALSE)
+  
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
   
@@ -68,6 +75,10 @@ write_dataframe <- function(client, datasource, table_name, data_frame,
   
   # Call the Python write_dataframe method
   tryCatch({
+    if (verbose && nrow(data_frame) > chunk_size) {
+      pb <- utils::txtProgressBar(min = 0, max = ceiling(nrow(data_frame)/chunk_size), style = 3)
+    }
+    
     ds_obj$write_dataframe(
       table_name = table_name,
       dataframe = py_df,
@@ -77,11 +88,58 @@ write_dataframe <- function(client, datasource, table_name, data_frame,
       force = force
     )
     
+    if (verbose && nrow(data_frame) > chunk_size) {
+      utils::setTxtProgressBar(pb, ceiling(nrow(data_frame)/chunk_size))
+      close(pb)
+    }
+    
     if (verbose) {
       cat("Write operation completed successfully\n")
     }
   }, error = function(e) {
+    # Check for cleanup-related errors
+    if (grepl("failed to clean up table", e$message, ignore.case = TRUE)) {
+      warning("Partial data may exist due to failed write operation")
+    }
     stop(paste("Failed to write dataframe to table:", e$message))
+  })
+  
+  invisible(NULL)
+}
+
+#' Drop a table quietly (suppress errors)
+#'
+#' @param client As returned by [datasource_client()]
+#' @param datasource The name of the datasource
+#' @param table_name Name of the table to drop
+#' @param override Configuration values to override ([add_override()])
+#'
+#' @return Invisible NULL
+#' @export
+#' @seealso \code{\link{write_dataframe}} for writing data to tables
+#' @examples
+#' \dontrun{
+#'   client <- datasource_client()
+#'   drop_table_quietly(client, "my_datasource", "test_table")
+#' }
+drop_table_quietly <- function(client, datasource, table_name, override = list()) {
+  # Input validation
+  if (!is.character(table_name) || length(table_name) != 1) {
+    stop("table_name must be a single character string")
+  }
+  
+  # Get the datasource object
+  ds_obj <- client$get_datasource(datasource)
+  
+  # Add credentials
+  credentials <- add_credentials(ds_obj$auth_type, override)
+  
+  # Call the Python _drop_table_quietly method
+  tryCatch({
+    ds_obj$`_drop_table_quietly`(table_name)
+    message("Table dropped quietly: ", table_name)
+  }, error = function(e) {
+    warning("Failed to drop table quietly: ", e$message)
   })
   
   invisible(NULL)
