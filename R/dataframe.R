@@ -16,18 +16,17 @@
 #' @seealso \code{\link{query}} for executing raw SQL queries, \code{\link{table_query}} for a fluent query interface
 #' @examples
 #' \dontrun{
-#'   client <- datasource_client()
-#'   df <- data.frame(id = 1:3, name = c("Alice", "Bob", "Charlie"))
-#'   write_dataframe(client, "my_datasource", "users", df, if_table_exists = "replace")
-#'   
-#'   # With verbose output
-#'   write_dataframe(client, "my_datasource", "users", df, verbose = TRUE)
+#' client <- datasource_client()
+#' df <- data.frame(id = 1:3, name = c("Alice", "Bob", "Charlie"))
+#' write_dataframe(client, "my_datasource", "users", df, if_table_exists = "replace")
+#'
+#' # With verbose output
+#' write_dataframe(client, "my_datasource", "users", df, verbose = TRUE)
 #' }
-write_dataframe <- function(client, datasource, table_name, data_frame, 
-                           if_table_exists = 'fail', chunk_size = 20000, 
-                           handle_mixed_types = TRUE, force = FALSE, 
+write_dataframe <- function(client, datasource, table_name, data_frame,
+                           if_table_exists = 'fail', chunk_size = 20000,
+                           handle_mixed_types = TRUE, force = FALSE,
                            verbose = FALSE, override = list()) {
-  
   # Input validation
   if (!is.data.frame(data_frame)) {
     stop("data_frame must be a data.frame object")
@@ -51,12 +50,8 @@ write_dataframe <- function(client, datasource, table_name, data_frame,
     cat("Mode:", if_table_exists, "\n")
   }
   
-  # Convert factors to characters and difftime to numeric
-  data_frame <- as.data.frame(lapply(data_frame, function(col) {
-    if (is.factor(col)) return(as.character(col))
-    if (inherits(col, "difftime")) return(as.numeric(col))
-    col
-  }), stringsAsFactors = FALSE)
+  # Enhanced data conversion for R to Python compatibility
+  data_frame <- .prepare_dataframe_for_python(data_frame, verbose)
   
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
@@ -96,15 +91,204 @@ write_dataframe <- function(client, datasource, table_name, data_frame,
     if (verbose) {
       cat("Write operation completed successfully\n")
     }
+    
   }, error = function(e) {
     # Check for cleanup-related errors
     if (grepl("failed to clean up table", e$message, ignore.case = TRUE)) {
       warning("Partial data may exist due to failed write operation")
     }
+    
     stop(paste("Failed to write dataframe to table:", e$message))
   })
   
   invisible(NULL)
+}
+
+#' Check if a table exists in the database
+#'
+#' @param client As returned by [datasource_client()]
+#' @param datasource The name of the datasource
+#' @param table_name Name of the table to check
+#' @param override Configuration values to override ([add_override()])
+#'
+#' @return Logical value indicating if table exists
+#' @export
+#' @seealso \code{\link{write_dataframe}} for writing data to tables
+#' @examples
+#' \dontrun{
+#' client <- datasource_client()
+#' if (table_exists(client, "my_datasource", "users")) {
+#'   cat("Users table exists\n")
+#' }
+#' }
+table_exists <- function(client, datasource, table_name, override = list()) {
+  # Input validation
+  if (!is.character(table_name) || length(table_name) != 1) {
+    stop("table_name must be a single character string")
+  }
+  
+  # Get the datasource object
+  ds_obj <- client$get_datasource(datasource)
+  
+  # Add credentials
+  credentials <- add_credentials(ds_obj$auth_type, override)
+  
+  # Check if table exists
+  tryCatch({
+    result <- ds_obj$table_exists(table_name)
+    return(as.logical(result))
+  }, error = function(e) {
+    stop(paste("Failed to check table existence:", e$message))
+  })
+}
+
+#' Get database type with enhanced detection
+#'
+#' @param client As returned by [datasource_client()]
+#' @param datasource The name of the datasource
+#' @param override Configuration values to override ([add_override()])
+#'
+#' @return Character string indicating database type
+#' @export
+#' @seealso \code{\link{set_db_type_override}} for manually setting database type
+#' @examples
+#' \dontrun{
+#' client <- datasource_client()
+#' db_type <- get_db_type(client, "my_datasource")
+#' cat("Database type:", db_type, "\n")
+#' }
+get_db_type <- function(client, datasource, override = list()) {
+  # Get the datasource object
+  ds_obj <- client$get_datasource(datasource)
+  
+  # Add credentials
+  credentials <- add_credentials(ds_obj$auth_type, override)
+  
+  # Get database type
+  tryCatch({
+    db_type <- ds_obj$get_db_type()
+    return(as.character(db_type))
+  }, error = function(e) {
+    stop(paste("Failed to get database type:", e$message))
+  })
+}
+
+#' Set database type override
+#'
+#' @param client As returned by [datasource_client()]
+#' @param datasource The name of the datasource
+#' @param db_type Database type to force (e.g., 'db2', 'postgresql', 'mysql', 'oracle', 'sqlserver') or NULL to remove override
+#' @param override Configuration values to override ([add_override()])
+#'
+#' @return Invisible NULL
+#' @export
+#' @seealso \code{\link{get_db_type}} for getting current database type, \code{\link{get_supported_db_types}} for supported types
+#' @examples
+#' \dontrun{
+#' client <- datasource_client()
+#' 
+#' # Force DB2 detection
+#' set_db_type_override(client, "my_datasource", "db2")
+#' 
+#' # Remove override
+#' set_db_type_override(client, "my_datasource", NULL)
+#' }
+set_db_type_override <- function(client, datasource, db_type, override = list()) {
+  # Input validation
+  if (!is.null(db_type) && (!is.character(db_type) || length(db_type) != 1)) {
+    stop("db_type must be a single character string or NULL")
+  }
+  
+  # Get the datasource object
+  ds_obj <- client$get_datasource(datasource)
+  
+  # Add credentials
+  credentials <- add_credentials(ds_obj$auth_type, override)
+  
+  # Set database type override
+  tryCatch({
+    if (is.null(db_type)) {
+      ds_obj$set_db_type_override(reticulate::py_none())
+      cat("Database type override removed - auto-detection re-enabled\n")
+    } else {
+      ds_obj$set_db_type_override(db_type)
+      cat("Database type override set to:", db_type, "\n")
+    }
+  }, error = function(e) {
+    stop(paste("Failed to set database type override:", e$message))
+  })
+  
+  invisible(NULL)
+}
+
+#' Get current database type override
+#'
+#' @param client As returned by [datasource_client()]
+#' @param datasource The name of the datasource
+#' @param override Configuration values to override ([add_override()])
+#'
+#' @return Character string of current override or NULL if auto-detection is enabled
+#' @export
+#' @seealso \code{\link{set_db_type_override}} for setting database type override
+#' @examples
+#' \dontrun{
+#' client <- datasource_client()
+#' current_override <- get_db_type_override(client, "my_datasource")
+#' if (!is.null(current_override)) {
+#'   cat("Database type manually set to:", current_override, "\n")
+#' } else {
+#'   cat("Using auto-detection\n")
+#' }
+#' }
+get_db_type_override <- function(client, datasource, override = list()) {
+  # Get the datasource object
+  ds_obj <- client$get_datasource(datasource)
+  
+  # Add credentials
+  credentials <- add_credentials(ds_obj$auth_type, override)
+  
+  # Get database type override
+  tryCatch({
+    result <- ds_obj$get_db_type_override()
+    if (reticulate::py_is_null_xptr(result)) {
+      return(NULL)
+    } else {
+      return(as.character(result))
+    }
+  }, error = function(e) {
+    stop(paste("Failed to get database type override:", e$message))
+  })
+}
+
+#' Get supported database types
+#'
+#' @param client As returned by [datasource_client()]
+#' @param datasource The name of the datasource
+#' @param override Configuration values to override ([add_override()])
+#'
+#' @return Character vector of supported database types
+#' @export
+#' @seealso \code{\link{set_db_type_override}} for setting database type override
+#' @examples
+#' \dontrun{
+#' client <- datasource_client()
+#' supported <- get_supported_db_types(client, "my_datasource")
+#' cat("Supported database types:", paste(supported, collapse = ", "), "\n")
+#' }
+get_supported_db_types <- function(client, datasource, override = list()) {
+  # Get the datasource object
+  ds_obj <- client$get_datasource(datasource)
+  
+  # Add credentials
+  credentials <- add_credentials(ds_obj$auth_type, override)
+  
+  # Get supported database types
+  tryCatch({
+    result <- ds_obj$get_supported_db_types()
+    return(as.character(reticulate::py_to_r(result)))
+  }, error = function(e) {
+    stop(paste("Failed to get supported database types:", e$message))
+  })
 }
 
 #' Drop a table quietly (suppress errors)
@@ -119,8 +303,8 @@ write_dataframe <- function(client, datasource, table_name, data_frame,
 #' @seealso \code{\link{write_dataframe}} for writing data to tables
 #' @examples
 #' \dontrun{
-#'   client <- datasource_client()
-#'   drop_table_quietly(client, "my_datasource", "test_table")
+#' client <- datasource_client()
+#' drop_table_quietly(client, "my_datasource", "test_table")
 #' }
 drop_table_quietly <- function(client, datasource, table_name, override = list()) {
   # Input validation
@@ -157,26 +341,25 @@ drop_table_quietly <- function(client, datasource, table_name, override = list()
 #' @seealso \code{\link{query}} for executing raw SQL queries, \code{\link{write_dataframe}} for writing data to tables
 #' @examples
 #' \dontrun{
-#'   client <- datasource_client()
-#'   
-#'   # Get all users
-#'   all_users <- table_query(client, "my_datasource", "users")$all()
-#'   
-#'   # Chained operations
-#'   active_users <- table_query(client, "my_datasource", "users")$
-#'     filter("is_active = TRUE")$
-#'     select("name, age")$
-#'     order_by("age DESC")$
-#'     all()
-#'     
-#'   # Get first result
-#'   first_user <- table_query(client, "my_datasource", "users")$first()
-#'   
-#'   # Count results
-#'   user_count <- table_query(client, "my_datasource", "users")$count()
+#' client <- datasource_client()
+#'
+#' # Get all users
+#' all_users <- table_query(client, "my_datasource", "users")$all()
+#'
+#' # Chained operations
+#' active_users <- table_query(client, "my_datasource", "users")$
+#'   filter("is_active = TRUE")$
+#'   select("name, age")$
+#'   order_by("age DESC")$
+#'   all()
+#'
+#' # Get first result
+#' first_user <- table_query(client, "my_datasource", "users")$first()
+#'
+#' # Count results
+#' user_count <- table_query(client, "my_datasource", "users")$count()
 #' }
 table_query <- function(client, datasource, table_name, override = list()) {
-  
   # Input validation
   if (!is.character(table_name) || length(table_name) != 1) {
     stop("table_name must be a single character string")
@@ -198,6 +381,7 @@ table_query <- function(client, datasource, table_name, override = list()) {
       if (!is.character(columns) || length(columns) != 1) {
         stop("columns must be a single character string (comma-separated column names)")
       }
+      
       query_obj$select(columns)
       return(result)
     },
@@ -207,6 +391,7 @@ table_query <- function(client, datasource, table_name, override = list()) {
       if (!is.character(condition) || length(condition) != 1) {
         stop("condition must be a single character string containing SQL WHERE condition")
       }
+      
       query_obj$filter(condition)
       return(result)
     },
@@ -216,6 +401,7 @@ table_query <- function(client, datasource, table_name, override = list()) {
       if (!is.character(order) || length(order) != 1) {
         stop("order must be a single character string containing SQL ORDER BY expression")
       }
+      
       query_obj$order_by(order)
       return(result)
     },
@@ -225,6 +411,7 @@ table_query <- function(client, datasource, table_name, override = list()) {
       if (!is.numeric(limit) || length(limit) != 1 || limit < 1) {
         stop("limit must be a positive integer")
       }
+      
       query_obj$limit(as.integer(limit))
       return(result)
     },
@@ -234,6 +421,7 @@ table_query <- function(client, datasource, table_name, override = list()) {
       if (!is.numeric(offset) || length(offset) != 1 || offset < 0) {
         stop("offset must be a non-negative integer")
       }
+      
       query_obj$offset(as.integer(offset))
       return(result)
     },
@@ -242,7 +430,7 @@ table_query <- function(client, datasource, table_name, override = list()) {
     all = function() {
       tryCatch({
         py_result <- query_obj$all()
-        return(reticulate::py_to_r(py_result))
+        return(.convert_pandas_to_r(py_result))
       }, error = function(e) {
         stop(paste("Failed to execute query:", e$message))
       })
@@ -253,7 +441,7 @@ table_query <- function(client, datasource, table_name, override = list()) {
       tryCatch({
         py_result <- query_obj$first()
         if (!reticulate::py_is_null_xptr(py_result)) {
-          return(reticulate::py_to_r(py_result))
+          return(.convert_pandas_series_to_r(py_result))
         } else {
           return(NULL)
         }
@@ -287,18 +475,17 @@ table_query <- function(client, datasource, table_name, override = list()) {
 #' @seealso \code{\link{passthrough_query}} for executing wrapped queries directly, \code{\link{query}} for standard queries
 #' @examples
 #' \dontrun{
-#'   client <- datasource_client()
-#'   
-#'   # Wrap a complex query for inspection
-#'   complex_query <- "SELECT * FROM users u JOIN orders o ON u.id = o.user_id ORDER BY u.created_date"
-#'   wrapped <- wrap_passthrough_query(client, "<data_source>", complex_query)
-#'   print(wrapped)
-#'   
-#'   # Then execute manually
-#'   result <- query(client, "<data_source>", wrapped)
+#' client <- datasource_client()
+#'
+#' # Wrap a complex query for inspection
+#' complex_query <- "SELECT * FROM users u JOIN orders o ON u.id = o.user_id ORDER BY u.created_date"
+#' wrapped <- wrap_passthrough_query(client, "my_datasource", complex_query)
+#' print(wrapped)
+#'
+#' # Then execute manually
+#' result <- query(client, "my_datasource", wrapped)
 #' }
 wrap_passthrough_query <- function(client, datasource, query, override = list()) {
-  
   # Input validation
   if (!is.character(query) || length(query) != 1) {
     stop("query must be a single character string")
@@ -313,7 +500,7 @@ wrap_passthrough_query <- function(client, datasource, query, override = list())
   # Wrap the query
   tryCatch({
     wrapped <- ds_obj$wrap_passthrough_query(query)
-    return(wrapped)
+    return(as.character(wrapped))
   }, error = function(e) {
     stop(paste("Failed to wrap query:", e$message))
   })
@@ -326,23 +513,22 @@ wrap_passthrough_query <- function(client, datasource, query, override = list())
 #' @param query SQL query to execute with passthrough
 #' @param override Configuration values to override ([add_override()])
 #'
-#' @return Query result
+#' @return Query result as data.frame
 #' @export
 #' @seealso \code{\link{wrap_passthrough_query}} for getting wrapped query strings, \code{\link{query}} for standard queries, \code{\link{table_query}} for fluent queries
 #' @examples
 #' \dontrun{
-#'   client <- datasource_client()
-#'   
-#'   # Execute complex query with passthrough
-#'   complex_query <- "SELECT * FROM users u JOIN orders o ON u.id = o.user_id ORDER BY u.created_date"
-#'   result <- passthrough_query(client, "<data_source>", complex_query)
-#'   
-#'   # Use data source-specific functions
-#'   db_specific <- "SELECT user_id, REGEXP_EXTRACT(email, '@(.*)') as domain FROM users"
-#'   result <- passthrough_query(client, "<data_source>", db_specific)
+#' client <- datasource_client()
+#'
+#' # Execute complex query with passthrough
+#' complex_query <- "SELECT * FROM users u JOIN orders o ON u.id = o.user_id ORDER BY u.created_date"
+#' result <- passthrough_query(client, "my_datasource", complex_query)
+#'
+#' # Use data source-specific functions
+#' db_specific <- "SELECT user_id, REGEXP_EXTRACT(email, '@(.*)') as domain FROM users"
+#' result <- passthrough_query(client, "my_datasource", db_specific)
 #' }
 passthrough_query <- function(client, datasource, query, override = list()) {
-  
   # Input validation
   if (!is.character(query) || length(query) != 1) {
     stop("query must be a single character string")
@@ -357,7 +543,8 @@ passthrough_query <- function(client, datasource, query, override = list()) {
   # Execute passthrough query
   tryCatch({
     result <- ds_obj$passthrough_query(query)
-    return(reticulate::py_to_r(result))
+    py_df <- result$to_pandas()
+    return(.convert_pandas_to_r(py_df))
   }, error = function(e) {
     stop(paste("Failed to execute passthrough query:", e$message))
   })
@@ -376,16 +563,15 @@ passthrough_query <- function(client, datasource, query, override = list()) {
 #' @seealso \code{\link{get_type_mappings}} for viewing current type mappings, \code{\link{write_dataframe}} for writing data with custom types
 #' @examples
 #' \dontrun{
-#'   client <- datasource_client()
-#'   
-#'   # Register a Date type mapping
-#'   register_type(client, "my_datasource", "Date", "DATE")
-#'   
-#'   # Register a custom numeric precision
-#'   register_type(client, "my_datasource", "numeric", "NUMERIC(10,2)")
+#' client <- datasource_client()
+#'
+#' # Register a Date type mapping
+#' register_type(client, "my_datasource", "Date", "DATE")
+#'
+#' # Register a custom numeric precision
+#' register_type(client, "my_datasource", "numeric", "NUMERIC(10,2)")
 #' }
 register_type <- function(client, datasource, r_type, sql_type, override = list()) {
-  
   # Input validation
   if (!is.character(r_type) || length(r_type) != 1) {
     stop("r_type must be a single character string")
@@ -401,19 +587,8 @@ register_type <- function(client, datasource, r_type, sql_type, override = list(
   # Add credentials
   credentials <- add_credentials(ds_obj$auth_type, override)
   
-  # Map R type name to Python type
-  py_types <- list(
-    "logical" = reticulate::import_builtins()$bool,
-    "integer" = reticulate::import_builtins()$int,
-    "numeric" = reticulate::import_builtins()$float,
-    "double" = reticulate::import_builtins()$float,
-    "character" = reticulate::import_builtins()$str,
-    "Date" = reticulate::import("datetime")$date,
-    "POSIXct" = reticulate::import("datetime")$datetime,
-    "POSIXlt" = reticulate::import("datetime")$datetime,
-    "list" = reticulate::import_builtins()$list,
-    "data.frame" = reticulate::import_builtins()$dict
-  )
+  # Enhanced R type to Python type mapping
+  py_types <- .get_python_type_mappings()
   
   # Get Python type equivalent
   py_type <- py_types[[r_type]]
@@ -444,17 +619,16 @@ register_type <- function(client, datasource, r_type, sql_type, override = list(
 #' @seealso \code{\link{register_type}} for adding custom type mappings, \code{\link{write_dataframe}} for writing data with custom types
 #' @examples
 #' \dontrun{
-#'   client <- datasource_client()
-#'   mappings <- get_type_mappings(client, "my_datasource")
-#'   print(mappings)
-#'   
-#'   # View specific type mapping
-#'   if ("str" %in% names(mappings)) {
-#'     cat("String type maps to:", mappings[["str"]], "\n")
-#'   }
+#' client <- datasource_client()
+#' mappings <- get_type_mappings(client, "my_datasource")
+#' print(mappings)
+#'
+#' # View specific type mapping
+#' if ("str" %in% names(mappings)) {
+#'   cat("String type maps to:", mappings[["str"]], "\n")
+#' }
 #' }
 get_type_mappings <- function(client, datasource, override = list()) {
-  
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
   
@@ -464,10 +638,8 @@ get_type_mappings <- function(client, datasource, override = list()) {
   # Get type mappings
   tryCatch({
     mappings <- ds_obj$get_type_mappings()
-    
     # Convert to R list
     result <- reticulate::py_to_r(mappings)
-    
     # Ensure it's a named list
     if (!is.list(result)) {
       result <- as.list(result)
@@ -491,21 +663,20 @@ get_type_mappings <- function(client, datasource, override = list()) {
 #' @seealso \code{\link{query}} for executing raw SQL queries, \code{\link{table_query}} for a fluent query interface
 #' @examples
 #' \dontrun{
-#'   client <- datasource_client()
-#'   
-#'   # Enable SQL debugging
-#'   enable_sql_debug(client, "my_datasource", TRUE)
-#'   
-#'   # Now SQL statements will be logged
-#'   result <- table_query(client, "my_datasource", "users")$
-#'     filter("age > 30")$
-#'     all()
-#'   
-#'   # Disable SQL debugging
-#'   enable_sql_debug(client, "my_datasource", FALSE)
+#' client <- datasource_client()
+#'
+#' # Enable SQL debugging
+#' enable_sql_debug(client, "my_datasource", TRUE)
+#'
+#' # Now SQL statements will be logged
+#' result <- table_query(client, "my_datasource", "users")$
+#'   filter("age > 30")$
+#'   all()
+#'
+#' # Disable SQL debugging
+#' enable_sql_debug(client, "my_datasource", FALSE)
 #' }
 enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list()) {
-  
   # Input validation
   if (!is.logical(enabled) || length(enabled) != 1) {
     stop("enabled must be TRUE or FALSE")
@@ -539,14 +710,160 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
       
       # Set the root logger level as well
       logging$getLogger()$setLevel(logging$DEBUG)
-      
       cat("SQL debugging enabled for R session\n")
     } else {
       cat("SQL debugging disabled\n")
     }
+    
   }, error = function(e) {
     stop(paste("Failed to configure SQL debugging:", e$message))
   })
   
   invisible(NULL)
+}
+
+# =============================================================================
+# HELPER FUNCTIONS (Internal)
+# =============================================================================
+
+#' Prepare R data.frame for Python conversion
+#' @param data_frame R data.frame to prepare
+#' @param verbose Whether to print conversion messages
+#' @return Prepared data.frame
+#' @keywords internal
+.prepare_dataframe_for_python <- function(data_frame, verbose = FALSE) {
+  if (verbose) {
+    cat("Preparing data.frame for Python conversion...\n")
+  }
+  
+  # Enhanced data conversion for R to Python compatibility
+  result <- as.data.frame(lapply(data_frame, function(col) {
+    # Convert factors to characters
+    if (is.factor(col)) {
+      if (verbose) cat("Converting factor column to character\n")
+      return(as.character(col))
+    }
+    
+    # Convert difftime to numeric
+    if (inherits(col, "difftime")) {
+      if (verbose) cat("Converting difftime column to numeric\n")
+      return(as.numeric(col))
+    }
+    
+    # Convert Date to character (will be parsed by pandas)
+    if (inherits(col, "Date")) {
+      if (verbose) cat("Converting Date column to character\n")
+      return(as.character(col))
+    }
+    
+    # Convert POSIXct/POSIXlt to character with proper format
+    if (inherits(col, c("POSIXct", "POSIXlt"))) {
+      if (verbose) cat("Converting datetime column to character\n")
+      return(format(col, "%Y-%m-%d %H:%M:%S"))
+    }
+    
+    # Convert complex to character
+    if (is.complex(col)) {
+      if (verbose) cat("Converting complex column to character\n")
+      return(as.character(col))
+    }
+    
+    # Convert raw to character
+    if (is.raw(col)) {
+      if (verbose) cat("Converting raw column to character\n")
+      return(as.character(col))
+    }
+    
+    # Handle list columns (convert to JSON strings)
+    if (is.list(col) && !is.data.frame(col)) {
+      if (verbose) cat("Converting list column to JSON strings\n")
+      return(sapply(col, function(x) {
+        if (is.null(x)) return(NA_character_)
+        tryCatch(jsonlite::toJSON(x, auto_unbox = TRUE), 
+                error = function(e) as.character(x))
+      }))
+    }
+    
+    col
+  }), stringsAsFactors = FALSE)
+  
+  if (verbose) {
+    cat("Data.frame preparation completed\n")
+  }
+  
+  return(result)
+}
+
+#' Convert pandas DataFrame to R data.frame with proper type handling
+#' @param py_df Python pandas DataFrame
+#' @return R data.frame
+#' @keywords internal
+.convert_pandas_to_r <- function(py_df) {
+  # Convert pandas DataFrame to R with enhanced type handling
+  r_df <- reticulate::py_to_r(py_df)
+  
+  # Post-process columns for better R compatibility
+  for (col_name in names(r_df)) {
+    col <- r_df[[col_name]]
+    
+    # Try to parse datetime strings back to POSIXct
+    if (is.character(col) && length(col) > 0) {
+      # Check if it looks like a datetime
+      sample_val <- col[!is.na(col)][1]
+      if (!is.na(sample_val) && grepl("^\\d{4}-\\d{2}-\\d{2}", sample_val)) {
+        parsed_date <- tryCatch({
+          as.POSIXct(col, format = "%Y-%m-%d %H:%M:%S")
+        }, error = function(e) NULL)
+        
+        if (!is.null(parsed_date) && sum(!is.na(parsed_date)) > 0) {
+          r_df[[col_name]] <- parsed_date
+        }
+      }
+    }
+  }
+  
+  return(r_df)
+}
+
+#' Convert pandas Series to R vector with proper type handling
+#' @param py_series Python pandas Series
+#' @return R vector
+#' @keywords internal
+.convert_pandas_series_to_r <- function(py_series) {
+  # Convert pandas Series to R vector
+  r_vector <- reticulate::py_to_r(py_series)
+  
+  # If it's a data.frame with one row, convert to named vector
+  if (is.data.frame(r_vector) && nrow(r_vector) == 1) {
+    result <- as.list(r_vector[1, ])
+    names(result) <- names(r_vector)
+    return(result)
+  }
+  
+  return(r_vector)
+}
+
+#' Get enhanced Python type mappings for R types
+#' @return Named list of Python types
+#' @keywords internal
+.get_python_type_mappings <- function() {
+  # Enhanced R type to Python type mapping
+  list(
+    "logical" = reticulate::import_builtins()$bool,
+    "integer" = reticulate::import_builtins()$int,
+    "numeric" = reticulate::import_builtins()$float,
+    "double" = reticulate::import_builtins()$float,
+    "character" = reticulate::import_builtins()$str,
+    "factor" = reticulate::import_builtins()$str,
+    "Date" = reticulate::import("datetime")$date,
+    "POSIXct" = reticulate::import("datetime")$datetime,
+    "POSIXlt" = reticulate::import("datetime")$datetime,
+    "list" = reticulate::import_builtins()$list,
+    "data.frame" = reticulate::import_builtins()$dict,
+    "matrix" = reticulate::import_builtins()$list,
+    "array" = reticulate::import_builtins()$list,
+    "complex" = reticulate::import_builtins()$str,
+    "raw" = reticulate::import_builtins()$bytes,
+    "difftime" = reticulate::import_builtins()$float
+  )
 }
