@@ -23,23 +23,23 @@ Create a fluent query interface for a table
 }
 \examples{
 \dontrun{
-  client <- datasource_client()
-  
-  # Get all users
-  all_users <- table_query(client, "my_datasource", "users")$all()
-  
-  # Chained operations
-  active_users <- table_query(client, "my_datasource", "users")$
-    filter("is_active = TRUE")$
-    select("name, age")$
-    order_by("age DESC")$
-    all()
-    
-  # Get first result
-  first_user <- table_query(client, "my_datasource", "users")$first()
-  
-  # Count results
-  user_count <- table_query(client, "my_datasource", "users")$count()
+client <- datasource_client()
+
+# Get all records
+all_records <- table_query(client, "my_datasource", "my_table")$all()
+
+# Chained operations
+active_records <- table_query(client, "my_datasource", "my_table")$
+  filter("is_active = TRUE")$
+  select("name, age")$
+  order_by("age DESC")$
+  all()
+
+# Get first result
+first_record <- table_query(client, "my_datasource", "my_table")$first()
+
+# Count results
+record_count <- table_query(client, "my_datasource", "my_table")$count()
 }
 }
 \seealso{

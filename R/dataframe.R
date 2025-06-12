@@ -1,14 +1,15 @@
-#' Write a data frame to a table in the datasource
+#' Write a data frame to a table in the datasource with automatic chunk size optimization
 #'
 #' @param client As returned by [datasource_client()]
 #' @param datasource The name of the datasource to write to
 #' @param table_name Name of the table to write to
 #' @param data_frame Data frame containing the data to write
 #' @param if_table_exists Action to take if the table already exists: 'fail' (default), 'replace', 'append', or 'truncate'
-#' @param chunk_size Number of rows to insert in each batch for large data frames (default: 20000)
+#' @param chunk_size Number of rows to insert in each batch. If NULL, auto-optimize based on data characteristics (default: NULL)
 #' @param handle_mixed_types If TRUE (default), detect and handle mixed types in columns
 #' @param force If TRUE, attempt to append data even if schema compatibility issues are detected (default: FALSE)
-#' @param verbose If TRUE, print progress messages (default: FALSE)
+#' @param auto_optimize_chunks If TRUE (default), automatically calculate optimal chunk size
+#' @param max_message_size_mb Maximum gRPC message size in MB for auto-optimization (default: 4.0)
 #' @param override Configuration values to override ([add_override()])
 #'
 #' @return Invisible NULL
@@ -18,15 +19,21 @@
 #' \dontrun{
 #' client <- datasource_client()
 #' df <- data.frame(id = 1:3, name = c("Alice", "Bob", "Charlie"))
-#' write_dataframe(client, "my_datasource", "users", df, if_table_exists = "replace")
-#'
-#' # With verbose output
-#' write_dataframe(client, "my_datasource", "users", df, verbose = TRUE)
+#' 
+#' # Auto-optimized chunking (default behavior)
+#' write_dataframe(client, "my_datasource", "my_table", df)
+#' 
+#' # Manual chunk size (overrides auto-optimization)
+#' write_dataframe(client, "my_datasource", "my_table", df, chunk_size = 5000)
+#' 
+#' # Auto-optimization with custom gRPC limit
+#' write_dataframe(client, "my_datasource", "my_table", df, max_message_size_mb = 2.0)
 #' }
 write_dataframe <- function(client, datasource, table_name, data_frame,
-                           if_table_exists = 'fail', chunk_size = 20000,
+                           if_table_exists = 'fail', chunk_size = NULL,
                            handle_mixed_types = TRUE, force = FALSE,
-                           verbose = FALSE, override = list()) {
+                           auto_optimize_chunks = TRUE, max_message_size_mb = 4.0,
+                           override = list()) {
   # Input validation
   if (!is.data.frame(data_frame)) {
     stop("data_frame must be a data.frame object")
@@ -45,13 +52,8 @@ write_dataframe <- function(client, datasource, table_name, data_frame,
     stop(paste("if_table_exists must be one of:", paste(valid_options, collapse = ", ")))
   }
   
-  if (verbose) {
-    cat("Writing", nrow(data_frame), "rows to table:", table_name, "\n")
-    cat("Mode:", if_table_exists, "\n")
-  }
-  
   # Enhanced data conversion for R to Python compatibility
-  data_frame <- .prepare_dataframe_for_python(data_frame, verbose)
+  data_frame <- .prepare_dataframe_for_python(data_frame)
   
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
@@ -63,33 +65,32 @@ write_dataframe <- function(client, datasource, table_name, data_frame,
   pandas <- reticulate::import("pandas")
   py_df <- pandas$DataFrame(data_frame)
   
-  if (verbose) {
-    cat("Converted R data.frame to pandas DataFrame\n")
-    cat("Calling Python write_dataframe method...\n")
-  }
-  
-  # Call the Python write_dataframe method
+  # Call the Python write_dataframe method with new parameters
   tryCatch({
-    if (verbose && nrow(data_frame) > chunk_size) {
-      pb <- utils::txtProgressBar(min = 0, max = ceiling(nrow(data_frame)/chunk_size), style = 3)
-    }
-    
-    ds_obj$write_dataframe(
-      table_name = table_name,
-      dataframe = py_df,
-      if_table_exists = if_table_exists,
-      chunksize = as.integer(chunk_size),
-      handle_mixed_types = handle_mixed_types,
-      force = force
-    )
-    
-    if (verbose && nrow(data_frame) > chunk_size) {
-      utils::setTxtProgressBar(pb, ceiling(nrow(data_frame)/chunk_size))
-      close(pb)
-    }
-    
-    if (verbose) {
-      cat("Write operation completed successfully\n")
+    if (is.null(chunk_size)) {
+      # Use auto-optimization
+      ds_obj$write_dataframe(
+        table_name = table_name,
+        dataframe = py_df,
+        if_table_exists = if_table_exists,
+        chunksize = reticulate::py_none(),
+        handle_mixed_types = handle_mixed_types,
+        force = force,
+        auto_optimize_chunks = auto_optimize_chunks,
+        max_message_size_mb = max_message_size_mb
+      )
+    } else {
+      # Use manual chunk size
+      ds_obj$write_dataframe(
+        table_name = table_name,
+        dataframe = py_df,
+        if_table_exists = if_table_exists,
+        chunksize = as.integer(chunk_size),
+        handle_mixed_types = handle_mixed_types,
+        force = force,
+        auto_optimize_chunks = auto_optimize_chunks,
+        max_message_size_mb = max_message_size_mb
+      )
     }
     
   }, error = function(e) {
@@ -99,6 +100,144 @@ write_dataframe <- function(client, datasource, table_name, data_frame,
     }
     
     stop(paste("Failed to write dataframe to table:", e$message))
+  })
+  
+  invisible(NULL)
+}
+
+#' Calculate optimal chunk size for a data frame
+#'
+#' @param client As returned by [datasource_client()]
+#' @param datasource The name of the datasource
+#' @param data_frame Data frame to analyze
+#' @param max_message_size_mb Maximum message size in MB (default: 4.0)
+#' @param safety_factor Safety multiplier to account for serialization overhead (default: 0.8)
+#' @param override Configuration values to override ([add_override()])
+#'
+#' @return Integer indicating optimal chunk size in number of rows
+#' @export
+#' @seealso \code{\link{write_dataframe}} for writing data with optimized chunks
+#' @examples
+#' \dontrun{
+#' client <- datasource_client()
+#' df <- data.frame(id = 1:10000, data = rep("large text", 10000))
+#' optimal_chunk <- calculate_optimal_chunk_size(client, "my_datasource", df)
+#' cat("Recommended chunk size:", optimal_chunk, "\n")
+#' }
+calculate_optimal_chunk_size <- function(client, datasource, data_frame, 
+                                       max_message_size_mb = 4.0, safety_factor = 0.8,
+                                       override = list()) {
+  # Input validation
+  if (!is.data.frame(data_frame)) {
+    stop("data_frame must be a data.frame object")
+  }
+  
+  # Get the datasource object
+  ds_obj <- client$get_datasource(datasource)
+  
+  # Add credentials
+  credentials <- add_credentials(ds_obj$auth_type, override)
+  
+  # Convert R data frame to Python pandas DataFrame
+  pandas <- reticulate::import("pandas")
+  py_df <- pandas$DataFrame(data_frame)
+  
+  # Call the Python calculate_optimal_chunk_size method
+  tryCatch({
+    result <- ds_obj$calculate_optimal_chunk_size(
+      dataframe = py_df,
+      max_message_size_mb = max_message_size_mb,
+      safety_factor = safety_factor
+    )
+    return(as.integer(result))
+  }, error = function(e) {
+    stop(paste("Failed to calculate optimal chunk size:", e$message))
+  })
+}
+
+#' Estimate message size for a given chunk size
+#'
+#' @param client As returned by [datasource_client()]
+#' @param datasource The name of the datasource
+#' @param data_frame Data frame to analyze
+#' @param chunk_size Number of rows per chunk
+#' @param override Configuration values to override ([add_override()])
+#'
+#' @return Numeric value indicating estimated message size in MB
+#' @export
+#' @seealso \code{\link{calculate_optimal_chunk_size}} for calculating optimal chunks
+#' @examples
+#' \dontrun{
+#' client <- datasource_client()
+#' df <- data.frame(id = 1:10000, data = rep("large text", 10000))
+#' estimated_size <- estimate_message_size(client, "my_datasource", df, 5000)
+#' cat("Estimated message size for 5000 rows:", estimated_size, "MB\n")
+#' }
+estimate_message_size <- function(client, datasource, data_frame, chunk_size, override = list()) {
+  # Input validation
+  if (!is.data.frame(data_frame)) {
+    stop("data_frame must be a data.frame object")
+  }
+  
+  if (!is.numeric(chunk_size) || length(chunk_size) != 1 || chunk_size < 1) {
+    stop("chunk_size must be a positive integer")
+  }
+  
+  # Get the datasource object
+  ds_obj <- client$get_datasource(datasource)
+  
+  # Add credentials
+  credentials <- add_credentials(ds_obj$auth_type, override)
+  
+  # Convert R data frame to Python pandas DataFrame
+  pandas <- reticulate::import("pandas")
+  py_df <- pandas$DataFrame(data_frame)
+  
+  # Call the Python estimate_message_size method
+  tryCatch({
+    result <- ds_obj$estimate_message_size(
+      dataframe = py_df,
+      chunk_size = as.integer(chunk_size)
+    )
+    return(as.numeric(result))
+  }, error = function(e) {
+    stop(paste("Failed to estimate message size:", e$message))
+  })
+}
+
+#' Set gRPC message limits for the datasource
+#'
+#' @param client As returned by [datasource_client()]
+#' @param datasource The name of the datasource
+#' @param max_message_size_mb Maximum message size in MB (default: 64.0)
+#' @param override Configuration values to override ([add_override()])
+#'
+#' @return Invisible NULL
+#' @export
+#' @seealso \code{\link{calculate_optimal_chunk_size}} for chunk size optimization
+#' @examples
+#' \dontrun{
+#' client <- datasource_client()
+#' set_grpc_message_limits(client, "my_datasource", max_message_size_mb = 64.0)
+#' }
+set_grpc_message_limits <- function(client, datasource, max_message_size_mb = 64.0, override = list()) {
+  # Input validation
+  if (!is.numeric(max_message_size_mb) || length(max_message_size_mb) != 1 || max_message_size_mb <= 0) {
+    stop("max_message_size_mb must be a positive number")
+  }
+  
+  # Get the datasource object
+  ds_obj <- client$get_datasource(datasource)
+  
+  # Add credentials
+  credentials <- add_credentials(ds_obj$auth_type, override)
+  
+  # Call the Python set_grpc_message_limits method
+  tryCatch({
+    ds_obj$set_grpc_message_limits(max_message_size_mb = max_message_size_mb)
+    cat("gRPC message limits updated to", max_message_size_mb, "MB\n")
+  }, error = function(e) {
+    stop(paste("Failed to set gRPC message limits:", e$message))
   })
   
   invisible(NULL)
@@ -117,8 +256,8 @@ write_dataframe <- function(client, datasource, table_name, data_frame,
 #' @examples
 #' \dontrun{
 #' client <- datasource_client()
-#' if (table_exists(client, "my_datasource", "users")) {
-#'   cat("Users table exists\n")
+#' if (table_exists(client, "my_datasource", "my_table")) {
+#'   cat("Table exists\n")
 #' }
 #' }
 table_exists <- function(client, datasource, table_name, override = list()) {
@@ -343,21 +482,21 @@ drop_table_quietly <- function(client, datasource, table_name, override = list()
 #' \dontrun{
 #' client <- datasource_client()
 #'
-#' # Get all users
-#' all_users <- table_query(client, "my_datasource", "users")$all()
+#' # Get all records
+#' all_records <- table_query(client, "my_datasource", "my_table")$all()
 #'
 #' # Chained operations
-#' active_users <- table_query(client, "my_datasource", "users")$
+#' active_records <- table_query(client, "my_datasource", "my_table")$
 #'   filter("is_active = TRUE")$
 #'   select("name, age")$
 #'   order_by("age DESC")$
 #'   all()
 #'
 #' # Get first result
-#' first_user <- table_query(client, "my_datasource", "users")$first()
+#' first_record <- table_query(client, "my_datasource", "my_table")$first()
 #'
 #' # Count results
-#' user_count <- table_query(client, "my_datasource", "users")$count()
+#' record_count <- table_query(client, "my_datasource", "my_table")$count()
 #' }
 table_query <- function(client, datasource, table_name, override = list()) {
   # Input validation
@@ -478,7 +617,7 @@ table_query <- function(client, datasource, table_name, override = list()) {
 #' client <- datasource_client()
 #'
 #' # Wrap a complex query for inspection
-#' complex_query <- "SELECT * FROM users u JOIN orders o ON u.id = o.user_id ORDER BY u.created_date"
+#' complex_query <- "SELECT * FROM my_table u JOIN orders o ON u.id = o.user_id ORDER BY u.created_date"
 #' wrapped <- wrap_passthrough_query(client, "my_datasource", complex_query)
 #' print(wrapped)
 #'
@@ -521,11 +660,11 @@ wrap_passthrough_query <- function(client, datasource, query, override = list())
 #' client <- datasource_client()
 #'
 #' # Execute complex query with passthrough
-#' complex_query <- "SELECT * FROM users u JOIN orders o ON u.id = o.user_id ORDER BY u.created_date"
+#' complex_query <- "SELECT * FROM my_table u JOIN orders o ON u.id = o.user_id ORDER BY u.created_date"
 #' result <- passthrough_query(client, "my_datasource", complex_query)
 #'
 #' # Use data source-specific functions
-#' db_specific <- "SELECT user_id, REGEXP_EXTRACT(email, '@(.*)') as domain FROM users"
+#' db_specific <- "SELECT user_id, REGEXP_EXTRACT(email, '@(.*)') as domain FROM my_table"
 #' result <- passthrough_query(client, "my_datasource", db_specific)
 #' }
 passthrough_query <- function(client, datasource, query, override = list()) {
@@ -669,7 +808,7 @@ get_type_mappings <- function(client, datasource, override = list()) {
 #' enable_sql_debug(client, "my_datasource", TRUE)
 #'
 #' # Now SQL statements will be logged
-#' result <- table_query(client, "my_datasource", "users")$
+#' result <- table_query(client, "my_datasource", "my_table")$
 #'   filter("age > 30")$
 #'   all()
 #'
@@ -728,55 +867,43 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
 
 #' Prepare R data.frame for Python conversion
 #' @param data_frame R data.frame to prepare
-#' @param verbose Whether to print conversion messages
 #' @return Prepared data.frame
 #' @keywords internal
-.prepare_dataframe_for_python <- function(data_frame, verbose = FALSE) {
-  if (verbose) {
-    cat("Preparing data.frame for Python conversion...\n")
-  }
-  
+.prepare_dataframe_for_python <- function(data_frame) {
   # Enhanced data conversion for R to Python compatibility
   result <- as.data.frame(lapply(data_frame, function(col) {
     # Convert factors to characters
     if (is.factor(col)) {
-      if (verbose) cat("Converting factor column to character\n")
       return(as.character(col))
     }
     
     # Convert difftime to numeric
     if (inherits(col, "difftime")) {
-      if (verbose) cat("Converting difftime column to numeric\n")
       return(as.numeric(col))
     }
     
     # Convert Date to character (will be parsed by pandas)
     if (inherits(col, "Date")) {
-      if (verbose) cat("Converting Date column to character\n")
       return(as.character(col))
     }
     
     # Convert POSIXct/POSIXlt to character with proper format
     if (inherits(col, c("POSIXct", "POSIXlt"))) {
-      if (verbose) cat("Converting datetime column to character\n")
       return(format(col, "%Y-%m-%d %H:%M:%S"))
     }
     
     # Convert complex to character
     if (is.complex(col)) {
-      if (verbose) cat("Converting complex column to character\n")
       return(as.character(col))
     }
     
     # Convert raw to character
     if (is.raw(col)) {
-      if (verbose) cat("Converting raw column to character\n")
       return(as.character(col))
     }
     
     # Handle list columns (convert to JSON strings)
     if (is.list(col) && !is.data.frame(col)) {
-      if (verbose) cat("Converting list column to JSON strings\n")
       return(sapply(col, function(x) {
         if (is.null(x)) return(NA_character_)
         tryCatch(jsonlite::toJSON(x, auto_unbox = TRUE), 
@@ -786,10 +913,6 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
     
     col
   }), stringsAsFactors = FALSE)
-  
-  if (verbose) {
-    cat("Data.frame preparation completed\n")
-  }
   
   return(result)
 }

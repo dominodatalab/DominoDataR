@@ -25,13 +25,13 @@ Register a custom type mapping
 }
 \examples{
 \dontrun{
-  client <- datasource_client()
-  
-  # Register a Date type mapping
-  register_type(client, "my_datasource", "Date", "DATE")
-  
-  # Register a custom numeric precision
-  register_type(client, "my_datasource", "numeric", "NUMERIC(10,2)")
+client <- datasource_client()
+
+# Register a Date type mapping
+register_type(client, "my_datasource", "Date", "DATE")
+
+# Register a custom numeric precision
+register_type(client, "my_datasource", "numeric", "NUMERIC(10,2)")
 }
 }
 \seealso{

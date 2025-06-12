@@ -23,18 +23,18 @@ Enable SQL debugging
 }
 \examples{
 \dontrun{
-  client <- datasource_client()
-  
-  # Enable SQL debugging
-  enable_sql_debug(client, "my_datasource", TRUE)
-  
-  # Now SQL statements will be logged
-  result <- table_query(client, "my_datasource", "users")$
-    filter("age > 30")$
-    all()
-  
-  # Disable SQL debugging
-  enable_sql_debug(client, "my_datasource", FALSE)
+client <- datasource_client()
+
+# Enable SQL debugging
+enable_sql_debug(client, "my_datasource", TRUE)
+
+# Now SQL statements will be logged
+result <- table_query(client, "my_datasource", "my_table")$
+  filter("age > 30")$
+  all()
+
+# Disable SQL debugging
+enable_sql_debug(client, "my_datasource", FALSE)
 }
 }
 \seealso{

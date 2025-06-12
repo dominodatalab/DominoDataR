@@ -23,15 +23,15 @@ Wrap a query for database passthrough
 }
 \examples{
 \dontrun{
-  client <- datasource_client()
-  
-  # Wrap a complex query for inspection
-  complex_query <- "SELECT * FROM users u JOIN orders o ON u.id = o.user_id ORDER BY u.created_date"
-  wrapped <- wrap_passthrough_query(client, "<data_source>", complex_query)
-  print(wrapped)
-  
-  # Then execute manually
-  result <- query(client, "<data_source>", wrapped)
+client <- datasource_client()
+
+# Wrap a complex query for inspection
+complex_query <- "SELECT * FROM my_table u JOIN orders o ON u.id = o.user_id ORDER BY u.created_date"
+wrapped <- wrap_passthrough_query(client, "my_datasource", complex_query)
+print(wrapped)
+
+# Then execute manually
+result <- query(client, "my_datasource", wrapped)
 }
 }
 \seealso{

@@ -2,7 +2,7 @@
 % Please edit documentation in R/dataframe.R
 \name{write_dataframe}
 \alias{write_dataframe}
-\title{Write a data frame to a table in the datasource}
+\title{Write a data frame to a table in the datasource with automatic chunk size optimization}
 \usage{
 write_dataframe(
   client,
@@ -10,10 +10,11 @@ write_dataframe(
   table_name,
   data_frame,
   if_table_exists = "fail",
-  chunk_size = 20000,
+  chunk_size = NULL,
   handle_mixed_types = TRUE,
   force = FALSE,
-  verbose = FALSE,
+  auto_optimize_chunks = TRUE,
+  max_message_size_mb = 4,
   override = list()
 )
 }
@@ -28,13 +29,15 @@ write_dataframe(
 
 \item{if_table_exists}{Action to take if the table already exists: 'fail' (default), 'replace', 'append', or 'truncate'}
 
-\item{chunk_size}{Number of rows to insert in each batch for large data frames (default: 20000)}
+\item{chunk_size}{Number of rows to insert in each batch. If NULL, auto-optimize based on data characteristics (default: NULL)}
 
 \item{handle_mixed_types}{If TRUE (default), detect and handle mixed types in columns}
 
 \item{force}{If TRUE, attempt to append data even if schema compatibility issues are detected (default: FALSE)}
 
-\item{verbose}{If TRUE, print progress messages (default: FALSE)}
+\item{auto_optimize_chunks}{If TRUE (default), automatically calculate optimal chunk size}
+
+\item{max_message_size_mb}{Maximum gRPC message size in MB for auto-optimization (default: 4.0)}
 
 \item{override}{Configuration values to override (\code{\link[=add_override]{add_override()}})}
 }
@@ -42,16 +45,21 @@ write_dataframe(
 Invisible NULL
 }
 \description{
-Write a data frame to a table in the datasource
+Write a data frame to a table in the datasource with automatic chunk size optimization
 }
 \examples{
 \dontrun{
-  client <- datasource_client()
-  df <- data.frame(id = 1:3, name = c("Alice", "Bob", "Charlie"))
-  write_dataframe(client, "my_datasource", "users", df, if_table_exists = "replace")
-  
-  # With verbose output
-  write_dataframe(client, "my_datasource", "users", df, verbose = TRUE)
+client <- datasource_client()
+df <- data.frame(id = 1:3, name = c("Alice", "Bob", "Charlie"))
+
+# Auto-optimized chunking (default behavior)
+write_dataframe(client, "my_datasource", "my_table", df)
+
+# Manual chunk size (overrides auto-optimization)
+write_dataframe(client, "my_datasource", "my_table", df, chunk_size = 5000)
+
+# Auto-optimization with custom gRPC limit
+write_dataframe(client, "my_datasource", "my_table", df, max_message_size_mb = 2.0)
 }
 }
 \seealso{
