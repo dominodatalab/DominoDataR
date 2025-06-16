@@ -40,7 +40,8 @@ add_override <- function(..., .override = character()) {
 add_credentials <- function(auth_type, config = list()) {
   if (auth_type == "OAuth") {
     credentials <- load_oauth_credentials(
-      Sys.getenv("DOMINO_TOKEN_FILE", "/var/lib/domino/home/.api/token")
+      "DOMINO_API_PROXY",
+      "/access-token"
     )
   } else if (is.element(auth_type, c("AWSIAMRole", "AWSIAMRoleWithUsername"))) {
     credentials <- load_aws_credentials(
@@ -75,11 +76,24 @@ load_aws_credentials <- function(location, profile = NULL) {
 
 #' Load OAuth Credentials
 #'
-#' @param location file path where token is located
+#' @param env_var the environment variable name containing the API proxy URL
+#' @param path the API endpoint path for retrieving the token
 #'
 #' @return named list of override configuration values
-load_oauth_credentials <- function(location) {
-  list(
-    token = readChar(location, file.info(location)$size)
-  )
+load_oauth_credentials <- function(env_var, path) {
+  api_proxy <- Sys.getenv(env_var)
+  if (api_proxy == "") {
+    stop(env_var, " environment variable is not set")
+  }
+  
+  url <- paste0(api_proxy, path)
+  
+  tryCatch({
+    response <- httr::GET(url)
+    httr::stop_for_status(response)
+    token <- httr::content(response, "text", encoding = "UTF-8")
+    list(token = token)
+  }, error = function(e) {
+    stop("Failed to retrieve token from ", url, ": ", e$message)
+  })
 }
