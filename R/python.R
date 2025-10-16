@@ -1,4 +1,4 @@
-#' Tell {reticulate} to use Python Conda version available on Domino Data Lab.
+#' Tell reticulate to use Python Conda version available on Domino Data Lab.
 #'
 #' Provide other options in case the package is used for local development.
 #'

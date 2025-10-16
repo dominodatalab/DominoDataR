@@ -43,6 +43,12 @@ object_http <- function(verb = "GET",
   if (datasource_type == "GenericS3Config") {
     config <- httr::config(ssl_verifypeer = FALSE)
   }
+  if (datasource_type == "NetAppVolumeConfig") {
+    token <- get_netapp_token()
+    if (!is.null(token) && token != "") {
+      headers["Authorization"] <- paste("Bearer", token)
+    }
+  }
 
   h <- do.call(httr::add_headers, headers)
 
@@ -95,4 +101,46 @@ encode_url_path <- function(url) {
   parsed <- urltools::url_parse(url)
   parsed$path <- urltools::url_encode(parsed$path)
   urltools::url_compose(parsed)
+}
+
+
+#' Get NetApp volume authentication token
+#'
+#' @details Retrieves JWT token for NetApp volume authentication.
+#'   Checks DOMINO_TOKEN_FILE and DOMINO_API_PROXY environment variables.
+#'
+#' @return JWT token string or NULL if not available
+#' @keywords internal
+get_netapp_token <- function() {
+  # Try to read from token file first
+  token_file <- Sys.getenv("DOMINO_TOKEN_FILE", "")
+  if (token_file != "" && file.exists(token_file)) {
+    tryCatch({
+      token <- readLines(token_file, n = 1, warn = FALSE)
+      if (length(token) > 0 && token != "") {
+        return(token)
+      }
+    }, error = function(e) {
+      warning("Failed to read token from file: ", e$message)
+    })
+  }
+
+  # Try to get token from API proxy
+  api_proxy <- Sys.getenv("DOMINO_API_PROXY", "")
+  if (api_proxy != "") {
+    url <- paste0(api_proxy, "/access-token")
+    tryCatch({
+      response <- httr::GET(url)
+      if (httr::status_code(response) == 200) {
+        token <- httr::content(response, "text", encoding = "UTF-8")
+        if (!is.null(token) && token != "") {
+          return(token)
+        }
+      }
+    }, error = function(e) {
+      warning("Failed to retrieve token from API proxy: ", e$message)
+    })
+  }
+
+  return(NULL)
 }

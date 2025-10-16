@@ -29,6 +29,9 @@ jobs:
       DOMINO_API_HOST: http://localhost:3000
       DOMINO_DATASOURCE_PROXY_FLIGHT_HOST: grpc://localhost:8080
       DOMINO_DATASOURCE_PROXY_HOST: http://localhost:8034
+      # NetApp volumes env variables
+      DOMINO_API_PROXY: http://localhost:3000
+      DOMINO_REMOTE_FILE_SYSTEM_HOSTPORT: http://localhost:8035
     steps:
       - uses: actions/checkout@v4
       - uses: r-lib/actions/setup-pandoc@v2

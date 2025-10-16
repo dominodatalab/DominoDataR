@@ -5,7 +5,7 @@ skip_if_not_domino_data <- function() {
   }
 }
 
-test_that("client can be initialized", {
+test_that("datasource client can be initialized", {
   skip_if_not_domino_data()
 
   token_file <- tempfile()
@@ -16,4 +16,16 @@ test_that("client can be initialized", {
   expect_no_error(DominoDataR::datasource_client(token_url = "TOKEN_URL"))
   expect_no_error(DominoDataR::datasource_client(token = "TOKEN"))
   expect_no_error(DominoDataR::datasource_client())
+})
+
+test_that("netapp volume client can be initialized", {
+  skip_if_not_domino_data()
+
+  token_file <- tempfile()
+  writeLines("TOKEN", token_file)
+
+  expect_no_error(DominoDataR::netapp_volume_client(token_file = token_file))
+  expect_no_error(DominoDataR::netapp_volume_client(token_url = "TOKEN_URL"))
+  expect_no_error(DominoDataR::netapp_volume_client(token = "TOKEN"))
+  expect_no_error(DominoDataR::netapp_volume_client())
 })

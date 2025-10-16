@@ -1,0 +1,122 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+#' List NetApp volumes
+#'
+#' @param client As returned by [netapp_volume_client()]
+#' @param offset Optional offset for pagination
+#' @param limit Optional limit for pagination
+#'
+#' @return A list of RemotefsVolume objects
+#' @export
+list_volumes <- function(client, offset = NULL, limit = NULL) {
+  if (!is.null(offset) && !is.null(limit)) {
+    volumes <- client$list_volumes(offset = as.integer(offset), limit = as.integer(limit))
+  } else if (!is.null(offset)) {
+    volumes <- client$list_volumes(offset = as.integer(offset))
+  } else if (!is.null(limit)) {
+    volumes <- client$list_volumes(limit = as.integer(limit))
+  } else {
+    volumes <- client$list_volumes()
+  }
+  return(volumes)
+}
+
+
+#' List snapshots for a NetApp volume
+#'
+#' @param client As returned by [netapp_volume_client()]
+#' @param volume_unique_name Unique name of the volume
+#' @param offset Optional offset for pagination
+#' @param limit Optional limit for pagination
+#'
+#' @return A list of RemotefsSnapshot objects
+#' @export
+list_snapshots <- function(client, volume_unique_name, offset = NULL, limit = NULL) {
+  if (!is.null(offset) && !is.null(limit)) {
+    snapshots <- client$list_snapshots(
+      volume_unique_name = volume_unique_name,
+      offset = as.integer(offset),
+      limit = as.integer(limit)
+    )
+  } else if (!is.null(offset)) {
+    snapshots <- client$list_snapshots(
+      volume_unique_name = volume_unique_name,
+      offset = as.integer(offset)
+    )
+  } else if (!is.null(limit)) {
+    snapshots <- client$list_snapshots(
+      volume_unique_name = volume_unique_name,
+      limit = as.integer(limit)
+    )
+  } else {
+    snapshots <- client$list_snapshots(volume_unique_name = volume_unique_name)
+  }
+  return(snapshots)
+}
+
+
+#' Get a NetApp volume by name
+#'
+#' @param client As returned by [netapp_volume_client()]
+#' @param name Unique name of the volume
+#'
+#' @return A Volume object
+#' @export
+get_volume <- function(client, name) {
+  volume <- client$get_volume(name)
+  return(volume)
+}
+
+
+#' List files in a NetApp volume
+#'
+#' @param client As returned by [netapp_volume_client()]
+#' @param volume_unique_name Unique name of the volume
+#' @param prefix Optional prefix to filter files
+#' @param page_size Optional number of files to fetch
+#'
+#' @return A vector of file paths
+#' @export
+list_volume_files <- function(client,
+                               volume_unique_name,
+                               prefix = "",
+                               page_size = 1000) {
+  files <- client$list_files(
+    volume_unique_name = volume_unique_name,
+    prefix = prefix,
+    page_size = as.integer(page_size)
+  )
+  return(files)
+}
+
+
+#' Get URL for a file in a NetApp volume
+#'
+#' @param client As returned by [netapp_volume_client()]
+#' @param volume_unique_name Unique name of the volume
+#' @param file_name Name of the file
+#'
+#' @return URL string for the file
+#' @export
+get_volume_file_url <- function(client, volume_unique_name, file_name) {
+  url <- client$get_file_url(
+    volume_unique_name = volume_unique_name,
+    file_name = file_name
+  )
+  return(url)
+}
