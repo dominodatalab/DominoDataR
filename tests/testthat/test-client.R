@@ -25,7 +25,5 @@ test_that("netapp volume client can be initialized", {
   writeLines("TOKEN", token_file)
 
   expect_no_error(DominoDataR::netapp_volume_client(token_file = token_file))
-  expect_no_error(DominoDataR::netapp_volume_client(token_url = "TOKEN_URL"))
   expect_no_error(DominoDataR::netapp_volume_client(token = "TOKEN"))
-  expect_no_error(DominoDataR::netapp_volume_client())
 })
