@@ -92,7 +92,7 @@ get_volume <- function(client, name) {
 #'
 #' @return A vector of file paths
 #' @export
-list_volume_files <- function(client,
+list_files <- function(client,
                                volume_unique_name,
                                prefix = "",
                                page_size = 1000) {
@@ -113,7 +113,7 @@ list_volume_files <- function(client,
 #'
 #' @return URL string for the file
 #' @export
-get_volume_file_url <- function(client, volume_unique_name, file_name) {
+get_file_url <- function(client, volume_unique_name, file_name) {
   url <- client$get_file_url(
     volume_unique_name = volume_unique_name,
     file_name = file_name
