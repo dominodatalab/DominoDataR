@@ -24,15 +24,9 @@
 #' @return A list of RemotefsVolume objects
 #' @export
 list_volumes <- function(client, offset = NULL, limit = NULL) {
-  if (!is.null(offset) && !is.null(limit)) {
-    volumes <- client$list_volumes(offset = as.integer(offset), limit = as.integer(limit))
-  } else if (!is.null(offset)) {
-    volumes <- client$list_volumes(offset = as.integer(offset))
-  } else if (!is.null(limit)) {
-    volumes <- client$list_volumes(limit = as.integer(limit))
-  } else {
-    volumes <- client$list_volumes()
-  }
+  if (!is.null(offset)) offset <- as.integer(offset)
+  if (!is.null(limit)) limit <- as.integer(limit)
+  volumes <- client$list_volumes(offset = offset, limit = limit)
   return(volumes)
 }
 
@@ -47,25 +41,13 @@ list_volumes <- function(client, offset = NULL, limit = NULL) {
 #' @return A list of RemotefsSnapshot objects
 #' @export
 list_snapshots <- function(client, volume_unique_name, offset = NULL, limit = NULL) {
-  if (!is.null(offset) && !is.null(limit)) {
-    snapshots <- client$list_snapshots(
-      volume_unique_name = volume_unique_name,
-      offset = as.integer(offset),
-      limit = as.integer(limit)
-    )
-  } else if (!is.null(offset)) {
-    snapshots <- client$list_snapshots(
-      volume_unique_name = volume_unique_name,
-      offset = as.integer(offset)
-    )
-  } else if (!is.null(limit)) {
-    snapshots <- client$list_snapshots(
-      volume_unique_name = volume_unique_name,
-      limit = as.integer(limit)
-    )
-  } else {
-    snapshots <- client$list_snapshots(volume_unique_name = volume_unique_name)
-  }
+  if (!is.null(offset)) offset <- as.integer(offset)
+  if (!is.null(limit)) limit <- as.integer(limit)
+  snapshots <- client$list_snapshots(
+    volume_unique_name = volume_unique_name,
+    offset = offset,
+    limit = limit
+  )
   return(snapshots)
 }
 
