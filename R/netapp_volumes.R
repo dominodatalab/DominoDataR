@@ -120,3 +120,78 @@ get_volume_file_url <- function(client, volume_unique_name, file_name) {
   )
   return(url)
 }
+
+
+#' Save an object from a NetApp volume to a local file
+#'
+#' @param client As returned by [netapp_volume_client()]
+#' @param volume_unique_name Unique name of the volume
+#' @param object The object to retrieve
+#' @param file File path to save object at. Defaults to the object base name.
+#' @param override Configuration values to override ([add_override()])
+#'
+#' @return File path where object was saved
+#' @export
+save_volume_object <- function(client,
+                                volume_unique_name,
+                                object,
+                                file = basename(object),
+                                override = list()) {
+  save_object(
+    client = client$datasource_client,
+    datasource = volume_unique_name,
+    object = object,
+    file = file,
+    override = override
+  )
+}
+
+
+#' Upload content to a NetApp volume
+#'
+#' @param client As returned by [netapp_volume_client()]
+#' @param volume_unique_name Unique name of the volume
+#' @param object The object key to create/overwrite
+#' @param what character vector, raw vector
+#' @param override Configuration values to override ([add_override()])
+#'
+#' @return HTTP status message
+#' @export
+put_volume_object <- function(client,
+                               volume_unique_name,
+                               object,
+                               what,
+                               override = list()) {
+  put_object(
+    client = client$datasource_client,
+    datasource = volume_unique_name,
+    object = object,
+    what = what,
+    override = override
+  )
+}
+
+
+#' Upload a file to a NetApp volume
+#'
+#' @param client As returned by [netapp_volume_client()]
+#' @param volume_unique_name Unique name of the volume
+#' @param object The object key in the volume
+#' @param file File path to upload
+#' @param override Configuration values to override ([add_override()])
+#'
+#' @return HTTP status message
+#' @export
+upload_volume_object <- function(client,
+                                  volume_unique_name,
+                                  object,
+                                  file,
+                                  override = list()) {
+  upload_object(
+    client = client$datasource_client,
+    datasource = volume_unique_name,
+    object = object,
+    file = file,
+    override = override
+  )
+}
