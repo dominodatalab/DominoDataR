@@ -39,3 +39,28 @@ datasource_client <- function(api_key = NULL, token_file = NULL, token_url = NUL
   }
   return(client)
 }
+
+
+#' Create a client for NetApp volumes
+#'
+#' @param token_file location of file to read token from
+#' @param token_url url of the location to read the token from
+#' @param token token to be used to authenticate
+#'
+#' @return A `domino_data.netapp_volumes.NetAppVolumeClient`.
+#' @export
+netapp_volume_client <- function(token_file = NULL, token_url = NULL, token = NULL) {
+  envvar <- c("DOMINO_CLIENT_SOURCE" = "R")
+  if (!is.null(token_file) || !is.null(token_url) || !is.null(token)) {
+    client <- withr::with_envvar(
+      new = envvar,
+      netapp_volumes$NetAppVolumeClient(token_file, token_url, token)
+    )
+  } else {
+    client <- withr::with_envvar(
+      new = envvar,
+      netapp_volumes$NetAppVolumeClient()
+    )
+  }
+  return(client)
+}
