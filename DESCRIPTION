@@ -1,9 +1,9 @@
 Package: DominoDataR
 Title: 'Domino Data R SDK'
 Version: 0.3.1
-Authors@R:
-    person("Murat", "Cetin", , "murat.cetin@dominodatalab.com", role = c("cre"))
-    person("Gabriel", "Haim", , "gabriel.haim@dominodatalab.com", role = c("aut"))
+Authors@R: c(
+    person("Murat", "Cetin", email = "murat.cetin@dominodatalab.com", role = "cre"),
+    person("Gabriel", "Haim", email = "gabriel.haim@dominodatalab.com", role = "aut"))
 Description: A wrapper on top of the 'Domino Data Python SDK' library. It lets 
     you query and access 'Domino Data Sources' directly from your R environment.
     Under the hood, 'Domino Data R SDK' leverages the API provided by the 
@@ -29,5 +29,4 @@ Suggests: testthat (>= 3.0.0)
 Config/testthat/edition: 3
 NeedsCompilation: no
 Packaged: 2023-07-13 17:05:45 UTC; gabriel.haim
-Author: Gabriel Haim [aut, cre]
 Maintainer: Murat Cetin <murat.cetin@dominodatalab.com>
