@@ -4,10 +4,12 @@
 \alias{load_oauth_credentials}
 \title{Load OAuth Credentials}
 \usage{
-load_oauth_credentials(location)
+load_oauth_credentials(env_var, path)
 }
 \arguments{
-\item{location}{file path where token is located}
+\item{env_var}{the environment variable name containing the API proxy URL}
+
+\item{path}{the API endpoint path for retrieving the token}
 }
 \value{
 named list of override configuration values

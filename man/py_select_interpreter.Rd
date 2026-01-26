@@ -2,7 +2,7 @@
 % Please edit documentation in R/python.R
 \name{py_select_interpreter}
 \alias{py_select_interpreter}
-\title{Tell {reticulate} to use Python Conda version available on Domino Data Lab.}
+\title{Tell reticulate to use Python Conda version available on Domino Data Lab.}
 \usage{
 py_select_interpreter()
 }
