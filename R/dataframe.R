@@ -104,7 +104,6 @@ write_dataframe <- function(client, datasource, table_name, data_frame,
   
   invisible(NULL)
 }
-
 #' Calculate optimal chunk size for a data frame
 #'
 #' @param client As returned by [datasource_client()]
