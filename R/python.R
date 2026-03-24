@@ -13,6 +13,13 @@ py_select_interpreter <- function() {
   #
   for (path in PYTHON_PATH) {
     if (file.exists(path)) {
+      # Unset VIRTUAL_ENV and pin RETICULATE_PYTHON before calling use_python().
+      # If VIRTUAL_ENV is set when reticulate initialises Python it will bind to
+      # the virtual-env interpreter instead of the one we want.  Clearing it
+      # here (and setting RETICULATE_PYTHON as a belt-and-braces guard) means
+      # users never need to do this manually before library(DominoDataR).
+      Sys.unsetenv("VIRTUAL_ENV")
+      Sys.setenv(RETICULATE_PYTHON = path)
       reticulate::use_python(path)
       return(TRUE)
     }
