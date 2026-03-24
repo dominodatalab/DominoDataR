@@ -25,6 +25,27 @@
 #' @param override Configuration values to override ([add_override()])
 #'
 #' @return An [arrow::Table]
+#'
+#' @examples
+#' \dontrun{
+#' client <- datasource_client()
+#'
+#' # Basic query — result is an Arrow Table; convert to data.frame as needed
+#' result <- query(client, "my_datasource", "SELECT * FROM my_table")
+#' df <- as.data.frame(result)
+#'
+#' # Filter at the database
+#' recent <- as.data.frame(
+#'   query(client, "my_datasource", "SELECT * FROM events WHERE event_date >= '2024-01-01'")
+#' )
+#'
+#' # Use dplyr directly on the Arrow Table without pulling everything into R
+#' library(dplyr)
+#' summary <- result |> filter(status == "active") |> count(region) |> collect()
+#' }
+#'
+#' @seealso [datasource_client()] to create the client, [table_query()] for a fluent
+#'   query interface, [execute_statement()] for DDL/DML, [write_dataframe()] for writes
 #' @export
 query <- function(client, datasource, query, override = list()) {
   datasource <- client$get_datasource(datasource)

@@ -23,6 +23,23 @@
 #' @param token token to be used to authenticate
 #'
 #' @return A `domino_data.data_sources.DataSourceClient`.
+#'
+#' @examples
+#' \dontrun{
+#' # Default — reads credentials from the Domino environment automatically
+#' client <- datasource_client()
+#'
+#' # Run a query and get the result as a data.frame
+#' df <- as.data.frame(query(client, "my_datasource", "SELECT * FROM my_table"))
+#'
+#' # Write a data.frame back to a table
+#' write_dataframe(client, "my_datasource", "my_table", df)
+#'
+#' # Execute DDL / DML that returns no result set
+#' execute_statement(client, "my_datasource", "TRUNCATE TABLE my_table IMMEDIATE")
+#' }
+#'
+#' @seealso [query()], [write_dataframe()], [execute_statement()]
 #' @export
 datasource_client <- function(api_key = NULL, token_file = NULL, token_url = NULL, token =  NULL) {
   envvar <- c("DOMINO_CLIENT_SOURCE" = "R")

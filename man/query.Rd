@@ -21,3 +21,27 @@ An \link[arrow:Table-class]{arrow::Table}
 \description{
 Query a datasource and returns an arrow Table
 }
+\examples{
+\dontrun{
+client <- datasource_client()
+
+# Basic query — result is an Arrow Table; convert to data.frame as needed
+result <- query(client, "my_datasource", "SELECT * FROM my_table")
+df <- as.data.frame(result)
+
+# Filter at the database
+recent <- as.data.frame(
+  query(client, "my_datasource", "SELECT * FROM events WHERE event_date >= '2024-01-01'")
+)
+
+# Use dplyr directly on the Arrow Table without pulling everything into R
+library(dplyr)
+summary <- result |> filter(status == "active") |> count(region) |> collect()
+}
+}
+\seealso{
+\code{\link{datasource_client}} to create the client,
+\code{\link{table_query}} for a fluent query interface,
+\code{\link{execute_statement}} for DDL/DML,
+\code{\link{write_dataframe}} for writes
+}
