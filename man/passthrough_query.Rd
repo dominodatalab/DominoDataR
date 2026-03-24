@@ -19,19 +19,24 @@ passthrough_query(client, datasource, query, override = list())
 Query result as data.frame
 }
 \description{
-Execute a query with database passthrough wrapper
+Wraps and executes a SQL query using Trino's \code{system.query()} table
+function. Only applicable to the legacy Starburst/Trino connector
+(\code{DB2Config}). This is \strong{not supported} on the native DB2
+connector (\code{DB2NativeConfig}) — calling this function with a native
+DB2 datasource will raise an error. Native DB2 users should use
+\code{\link{query}} directly.
 }
 \examples{
 \dontrun{
 client <- datasource_client()
 
-# Execute complex query with passthrough
+# Execute complex query with passthrough (Starburst/Trino only)
 complex_query <- "SELECT * FROM my_table u JOIN orders o ON u.id = o.user_id ORDER BY u.created_date"
-result <- passthrough_query(client, "my_datasource", complex_query)
+result <- passthrough_query(client, "my_starburst_datasource", complex_query)
 
-# Use data source-specific functions
+# Use data source-specific functions via passthrough
 db_specific <- "SELECT user_id, REGEXP_EXTRACT(email, '@(.*)') as domain FROM my_table"
-result <- passthrough_query(client, "my_datasource", db_specific)
+result <- passthrough_query(client, "my_starburst_datasource", db_specific)
 }
 }
 \seealso{

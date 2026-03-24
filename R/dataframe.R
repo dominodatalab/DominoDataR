@@ -58,9 +58,6 @@ write_dataframe <- function(client, datasource, table_name, data_frame,
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
   
-  # Add credentials
-  credentials <- add_credentials(ds_obj$auth_type, override)
-  
   # Convert R data frame to Python pandas DataFrame
   pandas <- reticulate::import("pandas")
   py_df <- pandas$DataFrame(data_frame)
@@ -134,9 +131,6 @@ calculate_optimal_chunk_size <- function(client, datasource, data_frame,
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
   
-  # Add credentials
-  credentials <- add_credentials(ds_obj$auth_type, override)
-  
   # Convert R data frame to Python pandas DataFrame
   pandas <- reticulate::import("pandas")
   py_df <- pandas$DataFrame(data_frame)
@@ -185,9 +179,6 @@ estimate_message_size <- function(client, datasource, data_frame, chunk_size, ov
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
   
-  # Add credentials
-  credentials <- add_credentials(ds_obj$auth_type, override)
-  
   # Convert R data frame to Python pandas DataFrame
   pandas <- reticulate::import("pandas")
   py_df <- pandas$DataFrame(data_frame)
@@ -228,13 +219,10 @@ set_grpc_message_limits <- function(client, datasource, max_message_size_mb = 64
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
   
-  # Add credentials
-  credentials <- add_credentials(ds_obj$auth_type, override)
-  
   # Call the Python set_grpc_message_limits method
   tryCatch({
     ds_obj$set_grpc_message_limits(max_message_size_mb = max_message_size_mb)
-    cat("gRPC message limits updated to", max_message_size_mb, "MB\n")
+    message("gRPC message limits updated to ", max_message_size_mb, " MB")
   }, error = function(e) {
     stop(paste("Failed to set gRPC message limits:", e$message))
   })
@@ -268,9 +256,6 @@ table_exists <- function(client, datasource, table_name, override = list()) {
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
   
-  # Add credentials
-  credentials <- add_credentials(ds_obj$auth_type, override)
-  
   # Check if table exists
   tryCatch({
     result <- ds_obj$table_exists(table_name)
@@ -298,9 +283,6 @@ table_exists <- function(client, datasource, table_name, override = list()) {
 get_db_type <- function(client, datasource, override = list()) {
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
-  
-  # Add credentials
-  credentials <- add_credentials(ds_obj$auth_type, override)
   
   # Get database type
   tryCatch({
@@ -340,17 +322,14 @@ set_db_type_override <- function(client, datasource, db_type, override = list())
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
   
-  # Add credentials
-  credentials <- add_credentials(ds_obj$auth_type, override)
-  
   # Set database type override
   tryCatch({
     if (is.null(db_type)) {
       ds_obj$set_db_type_override(reticulate::py_none())
-      cat("Database type override removed - auto-detection re-enabled\n")
+      message("Database type override removed - auto-detection re-enabled")
     } else {
       ds_obj$set_db_type_override(db_type)
-      cat("Database type override set to:", db_type, "\n")
+      message("Database type override set to: ", db_type)
     }
   }, error = function(e) {
     stop(paste("Failed to set database type override:", e$message))
@@ -381,9 +360,6 @@ set_db_type_override <- function(client, datasource, db_type, override = list())
 get_db_type_override <- function(client, datasource, override = list()) {
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
-  
-  # Add credentials
-  credentials <- add_credentials(ds_obj$auth_type, override)
   
   # Get database type override
   tryCatch({
@@ -416,9 +392,6 @@ get_db_type_override <- function(client, datasource, override = list()) {
 get_supported_db_types <- function(client, datasource, override = list()) {
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
-  
-  # Add credentials
-  credentials <- add_credentials(ds_obj$auth_type, override)
   
   # Get supported database types
   tryCatch({
@@ -453,9 +426,6 @@ drop_table_quietly <- function(client, datasource, table_name, override = list()
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
   
-  # Add credentials
-  credentials <- add_credentials(ds_obj$auth_type, override)
-  
   # Call the Python _drop_table_quietly method
   tryCatch({
     ds_obj$`_drop_table_quietly`(table_name)
@@ -464,6 +434,56 @@ drop_table_quietly <- function(client, datasource, table_name, override = list()
     warning("Failed to drop table quietly: ", e$message)
   })
   
+  invisible(NULL)
+}
+
+#' Execute a DDL or DML statement that does not return a result set
+#'
+#' Use this function to run statements such as \code{CREATE TABLE},
+#' \code{DROP TABLE}, \code{INSERT}, \code{UPDATE}, or \code{DELETE}
+#' against a datasource. Unlike [query()], no result set is expected or
+#' returned. On DB2NativeConfig datasources this is the correct way to
+#' execute MERGE, UPDATE, and DELETE — routing those through [query()]
+#' will fail because Arrow Flight DoGet requires a tabular response.
+#'
+#' @param client As returned by [datasource_client()]
+#' @param datasource The name of the datasource
+#' @param sql DDL or DML statement to execute
+#' @param override Configuration values to override ([add_override()])
+#'
+#' @return Invisible NULL
+#' @export
+#' @seealso \code{\link{query}} for SELECT statements, \code{\link{write_dataframe}} for bulk data loading
+#' @examples
+#' \dontrun{
+#' client <- datasource_client()
+#'
+#' # Create a table
+#' execute_statement(client, "my_datasource",
+#'   "CREATE TABLE my_schema.my_table (id INTEGER, name VARCHAR(100))")
+#'
+#' # Delete rows
+#' execute_statement(client, "my_datasource",
+#'   "DELETE FROM my_schema.my_table WHERE id > 100")
+#'
+#' # DB2 MERGE (not supported via query())
+#' execute_statement(client, "my_db2_datasource",
+#'   "MERGE INTO target AS t USING source AS s ON t.id = s.id
+#'    WHEN MATCHED THEN UPDATE SET t.val = s.val")
+#' }
+execute_statement <- function(client, datasource, sql, override = list()) {
+  if (!is.character(sql) || length(sql) != 1) {
+    stop("sql must be a single character string")
+  }
+
+  ds_obj <- client$get_datasource(datasource)
+
+  tryCatch({
+    ds_obj$execute_statement(sql)
+  }, error = function(e) {
+    stop(paste("Failed to execute statement:", e$message))
+  })
+
   invisible(NULL)
 }
 
@@ -505,9 +525,6 @@ table_query <- function(client, datasource, table_name, override = list()) {
   
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
-  
-  # Add credentials
-  credentials <- add_credentials(ds_obj$auth_type, override)
   
   # Create the TableQuery object
   query_obj <- ds_obj$table(table_name)
@@ -603,6 +620,14 @@ table_query <- function(client, datasource, table_name, override = list()) {
 
 #' Wrap a query for database passthrough
 #'
+#' Wraps a SQL query in Trino's \code{system.query()} table function for
+#' passthrough execution on the legacy Starburst/Trino connector
+#' (\code{DB2Config}). This is \strong{not supported} on the native DB2
+#' connector (\code{DB2NativeConfig}) — calling this function with a native
+#' DB2 datasource will raise an error. Native DB2 users should use [query()]
+#' directly, as all DB2-native SQL functions are available without a
+#' passthrough wrapper.
+#'
 #' @param client As returned by [datasource_client()]
 #' @param datasource The name of the datasource
 #' @param query SQL query to wrap
@@ -615,13 +640,13 @@ table_query <- function(client, datasource, table_name, override = list()) {
 #' \dontrun{
 #' client <- datasource_client()
 #'
-#' # Wrap a complex query for inspection
+#' # Wrap a complex query for inspection (Starburst/Trino only)
 #' complex_query <- "SELECT * FROM my_table u JOIN orders o ON u.id = o.user_id ORDER BY u.created_date"
-#' wrapped <- wrap_passthrough_query(client, "my_datasource", complex_query)
+#' wrapped <- wrap_passthrough_query(client, "my_starburst_datasource", complex_query)
 #' print(wrapped)
 #'
 #' # Then execute manually
-#' result <- query(client, "my_datasource", wrapped)
+#' result <- query(client, "my_starburst_datasource", wrapped)
 #' }
 wrap_passthrough_query <- function(client, datasource, query, override = list()) {
   # Input validation
@@ -631,9 +656,6 @@ wrap_passthrough_query <- function(client, datasource, query, override = list())
   
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
-  
-  # Add credentials
-  credentials <- add_credentials(ds_obj$auth_type, override)
   
   # Wrap the query
   tryCatch({
@@ -645,6 +667,13 @@ wrap_passthrough_query <- function(client, datasource, query, override = list())
 }
 
 #' Execute a query with database passthrough wrapper
+#'
+#' Wraps and executes a SQL query using Trino's \code{system.query()} table
+#' function. Only applicable to the legacy Starburst/Trino connector
+#' (\code{DB2Config}). This is \strong{not supported} on the native DB2
+#' connector (\code{DB2NativeConfig}) — calling this function with a native
+#' DB2 datasource will raise an error. Native DB2 users should use [query()]
+#' directly.
 #'
 #' @param client As returned by [datasource_client()]
 #' @param datasource The name of the datasource
@@ -658,13 +687,13 @@ wrap_passthrough_query <- function(client, datasource, query, override = list())
 #' \dontrun{
 #' client <- datasource_client()
 #'
-#' # Execute complex query with passthrough
+#' # Execute complex query with passthrough (Starburst/Trino only)
 #' complex_query <- "SELECT * FROM my_table u JOIN orders o ON u.id = o.user_id ORDER BY u.created_date"
-#' result <- passthrough_query(client, "my_datasource", complex_query)
+#' result <- passthrough_query(client, "my_starburst_datasource", complex_query)
 #'
-#' # Use data source-specific functions
+#' # Use data source-specific functions via passthrough
 #' db_specific <- "SELECT user_id, REGEXP_EXTRACT(email, '@(.*)') as domain FROM my_table"
-#' result <- passthrough_query(client, "my_datasource", db_specific)
+#' result <- passthrough_query(client, "my_starburst_datasource", db_specific)
 #' }
 passthrough_query <- function(client, datasource, query, override = list()) {
   # Input validation
@@ -674,9 +703,6 @@ passthrough_query <- function(client, datasource, query, override = list()) {
   
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
-  
-  # Add credentials
-  credentials <- add_credentials(ds_obj$auth_type, override)
   
   # Execute passthrough query
   tryCatch({
@@ -722,9 +748,6 @@ register_type <- function(client, datasource, r_type, sql_type, override = list(
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
   
-  # Add credentials
-  credentials <- add_credentials(ds_obj$auth_type, override)
-  
   # Enhanced R type to Python type mapping
   py_types <- .get_python_type_mappings()
   
@@ -738,7 +761,7 @@ register_type <- function(client, datasource, r_type, sql_type, override = list(
   # Register the type mapping
   tryCatch({
     ds_obj$register_type(py_type, sql_type)
-    cat("Successfully registered type mapping:", r_type, "->", sql_type, "\n")
+    message("Successfully registered type mapping: ", r_type, " -> ", sql_type)
   }, error = function(e) {
     stop(paste("Failed to register type mapping:", e$message))
   })
@@ -769,9 +792,6 @@ register_type <- function(client, datasource, r_type, sql_type, override = list(
 get_type_mappings <- function(client, datasource, override = list()) {
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
-  
-  # Add credentials
-  credentials <- add_credentials(ds_obj$auth_type, override)
   
   # Get type mappings
   tryCatch({
@@ -822,9 +842,6 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
   
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
-  
-  # Add credentials
-  credentials <- add_credentials(ds_obj$auth_type, override)
   
   # Enable or disable SQL debugging
   tryCatch({

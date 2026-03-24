@@ -19,19 +19,25 @@ wrap_passthrough_query(client, datasource, query, override = list())
 Wrapped query string
 }
 \description{
-Wrap a query for database passthrough
+Wraps a SQL query in Trino's \code{system.query()} table function for
+passthrough execution on the legacy Starburst/Trino connector
+(\code{DB2Config}). This is \strong{not supported} on the native DB2
+connector (\code{DB2NativeConfig}) — calling this function with a native
+DB2 datasource will raise an error. Native DB2 users should use
+\code{\link{query}} directly, as all DB2-native SQL functions are available
+without a passthrough wrapper.
 }
 \examples{
 \dontrun{
 client <- datasource_client()
 
-# Wrap a complex query for inspection
+# Wrap a complex query for inspection (Starburst/Trino only)
 complex_query <- "SELECT * FROM my_table u JOIN orders o ON u.id = o.user_id ORDER BY u.created_date"
-wrapped <- wrap_passthrough_query(client, "my_datasource", complex_query)
+wrapped <- wrap_passthrough_query(client, "my_starburst_datasource", complex_query)
 print(wrapped)
 
 # Then execute manually
-result <- query(client, "my_datasource", wrapped)
+result <- query(client, "my_starburst_datasource", wrapped)
 }
 }
 \seealso{
