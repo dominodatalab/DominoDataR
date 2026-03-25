@@ -86,6 +86,8 @@ make_request <- function(verb, url, config, headers, request_body, write_disk) {
     } else {
       r <- httr::PUT(url, headers, config, body = request_body)
     }
+  } else {
+    stop(paste0("Unsupported HTTP verb: ", verb))
   }
   r
 }

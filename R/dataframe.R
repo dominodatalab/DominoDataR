@@ -926,7 +926,12 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
     vapply(data_frame, function(x) inherits(x, c("POSIXct", "POSIXlt")), logical(1L))
   ]
   for (col in datetime_cols) {
-    py_df[[col]] <- py_df[[col]]$dt$tz_convert("UTC")$dt$tz_localize(reticulate::py_none())
+    # tz_convert() raises TypeError on tz-naive columns (e.g. POSIXct with tz="").
+    # Guard: only strip tz if the column actually carries timezone information.
+    tz_val <- tryCatch(py_df[[col]]$dtype$tz, error = function(e) NULL)
+    if (!is.null(tz_val) && !reticulate::py_is_none(tz_val)) {
+      py_df[[col]] <- py_df[[col]]$dt$tz_convert("UTC")$dt$tz_localize(reticulate::py_none())
+    }
   }
 
   py_df
