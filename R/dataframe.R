@@ -52,15 +52,11 @@ write_dataframe <- function(client, datasource, table_name, data_frame,
     stop(paste("if_table_exists must be one of:", paste(valid_options, collapse = ", ")))
   }
   
-  # Enhanced data conversion for R to Python compatibility
-  data_frame <- .prepare_dataframe_for_python(data_frame)
-  
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
-  
-  # Convert R data frame to Python pandas DataFrame
-  pandas <- reticulate::import("pandas")
-  py_df <- pandas$DataFrame(data_frame)
+
+  # Convert R → Arrow → pandas (zero-copy via Arrow C Data Interface)
+  py_df <- .r_df_to_pandas(data_frame)
   
   # Call the Python write_dataframe method with new parameters
   tryCatch({
@@ -131,10 +127,8 @@ calculate_optimal_chunk_size <- function(client, datasource, data_frame,
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
   
-  # Convert R data frame to Python pandas DataFrame
-  pandas <- reticulate::import("pandas")
-  py_df <- pandas$DataFrame(data_frame)
-  
+  py_df <- .r_df_to_pandas(data_frame)
+
   # Call the Python calculate_optimal_chunk_size method
   tryCatch({
     result <- ds_obj$calculate_optimal_chunk_size(
@@ -179,10 +173,8 @@ estimate_message_size <- function(client, datasource, data_frame, chunk_size, ov
   # Get the datasource object
   ds_obj <- client$get_datasource(datasource)
   
-  # Convert R data frame to Python pandas DataFrame
-  pandas <- reticulate::import("pandas")
-  py_df <- pandas$DataFrame(data_frame)
-  
+  py_df <- .r_df_to_pandas(data_frame)
+
   # Call the Python estimate_message_size method
   tryCatch({
     result <- ds_obj$estimate_message_size(
@@ -881,56 +873,33 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
 # HELPER FUNCTIONS (Internal)
 # =============================================================================
 
-#' Prepare R data.frame for Python conversion
-#' @param data_frame R data.frame to prepare
-#' @return Prepared data.frame
+#' Convert an R data.frame to a Python pandas DataFrame via Arrow
+#'
+#' Uses the Arrow C Data Interface for near-zero-copy transfer between R and
+#' Python, which is orders of magnitude faster than reticulate's default
+#' element-by-element marshaling.  It also preserves native column types so
+#' that DB2 DoPut (bulk insert) succeeds for Date and timestamp columns:
+#'
+#'   R Date    → Arrow date32    → pandas Timestamp  (DB DATE columns match)
+#'   R POSIXct → Arrow timestamp → pandas Timestamp  (DB TIMESTAMP columns match)
+#'   R numeric → Arrow float64   → pandas float64    (buffer shared, no copy)
+#'   R factor  → Arrow dictionary → pandas Categorical → cast to object below
+#'
+#' @param data_frame R data.frame to convert
+#' @return Python pandas DataFrame
 #' @keywords internal
-.prepare_dataframe_for_python <- function(data_frame) {
-  # Enhanced data conversion for R to Python compatibility
-  result <- as.data.frame(lapply(data_frame, function(col) {
-    # Convert factors to characters
-    if (is.factor(col)) {
-      return(as.character(col))
-    }
-    
-    # Convert difftime to numeric
-    if (inherits(col, "difftime")) {
-      return(as.numeric(col))
-    }
-    
-    # Convert Date to character (will be parsed by pandas)
-    if (inherits(col, "Date")) {
-      return(as.character(col))
-    }
-    
-    # Convert POSIXct/POSIXlt to character with proper format
-    if (inherits(col, c("POSIXct", "POSIXlt"))) {
-      return(format(col, "%Y-%m-%d %H:%M:%S"))
-    }
-    
-    # Convert complex to character
-    if (is.complex(col)) {
-      return(as.character(col))
-    }
-    
-    # Convert raw to character
-    if (is.raw(col)) {
-      return(as.character(col))
-    }
-    
-    # Handle list columns (convert to JSON strings)
-    if (is.list(col) && !is.data.frame(col)) {
-      return(sapply(col, function(x) {
-        if (is.null(x)) return(NA_character_)
-        tryCatch(jsonlite::toJSON(x, auto_unbox = TRUE), 
-                error = function(e) as.character(x))
-      }))
-    }
-    
-    col
-  }), stringsAsFactors = FALSE)
-  
-  return(result)
+.r_df_to_pandas <- function(data_frame) {
+  arrow_table <- arrow::as_arrow_table(data_frame)
+  py_df <- reticulate::r_to_py(arrow_table)$to_pandas()
+
+  # R factors arrive as pandas Categorical (Arrow dictionary encoding).
+  # Cast to plain object dtype — all DB writers, including DoPut, expect strings.
+  factor_cols <- names(data_frame)[vapply(data_frame, is.factor, logical(1L))]
+  for (col in factor_cols) {
+    py_df[[col]] <- py_df[[col]]$astype("object")
+  }
+
+  py_df
 }
 
 #' Convert pandas DataFrame to R data.frame with proper type handling
