@@ -41,6 +41,23 @@
 #'
 #' @seealso [query()], [write_dataframe()], [execute_statement()]
 #' @export
+datasource_client <- function(api_key = NULL, token_file = NULL, token_url = NULL, token =  NULL) {
+  envvar <- c("DOMINO_CLIENT_SOURCE" = "R")
+  if (!is.null(api_key) || !is.null(token_file) || !is.null(token_url) || !is.null(token)) {
+    client <- withr::with_envvar(
+      new = envvar,
+      domino_data_sources$DataSourceClient(api_key, token_file, token_url, token)
+    )
+  } else {
+    client <- withr::with_envvar(
+      new = envvar,
+      domino_data_sources$DataSourceClient()
+    )
+  }
+  return(client)
+}
+
+
 #' Cached wrapper around client$get_datasource()
 #'
 #' @details Internal. Calls `client$get_datasource(name)` once per datasource
@@ -56,23 +73,6 @@
     assign(datasource, client$get_datasource(datasource), envir = .ds_cache)
   }
   .ds_cache[[datasource]]
-}
-
-
-datasource_client <- function(api_key = NULL, token_file = NULL, token_url = NULL, token =  NULL) {
-  envvar <- c("DOMINO_CLIENT_SOURCE" = "R")
-  if (!is.null(api_key) || !is.null(token_file) || !is.null(token_url) || !is.null(token)) {
-    client <- withr::with_envvar(
-      new = envvar,
-      domino_data_sources$DataSourceClient(api_key, token_file, token_url, token)
-    )
-  } else {
-    client <- withr::with_envvar(
-      new = envvar,
-      domino_data_sources$DataSourceClient()
-    )
-  }
-  return(client)
 }
 
 

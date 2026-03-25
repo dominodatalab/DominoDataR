@@ -855,8 +855,6 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
         domino_logger$addHandler(handler)
       }
       
-      # Set the root logger level as well
-      logging$getLogger()$setLevel(logging$DEBUG)
       cat("SQL debugging enabled for R session\n")
     } else {
       cat("SQL debugging disabled\n")
@@ -989,7 +987,7 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
   writer$close()
   ipc_buf  <- sink$getvalue()$to_pybytes()
   as.data.frame(
-    arrow::read_ipc_stream(reticulate::py_to_r(ipc_buf))
+    .cast_string_date_cols(arrow::read_ipc_stream(reticulate::py_to_r(ipc_buf)))
   )
 }
 
