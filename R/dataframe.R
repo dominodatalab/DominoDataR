@@ -864,13 +864,29 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
 .cast_string_date_cols <- function(tbl) {
   for (i in seq_len(tbl$num_columns) - 1L) {
     col <- tbl$column(i)
-    # Use inherits() on the R6 type class rather than != / == operator overloads,
-    # which fall back to pointer comparison in some arrow R package versions and
-    # therefore always return TRUE (skipping every column).
-    if (!inherits(col$type, c("Utf8", "LargeUtf8"))) next
-    # Use the R6 $cast() method directly rather than the arrow::cast() generic,
-    # which dispatches through S3 and may not handle ChunkedArray in all versions.
-    casted <- tryCatch(col$cast(arrow::date32()), error = function(e) NULL)
+    # Use the integer type ID rather than R6 class name or == / != operator.
+    # When Arrow types are reconstructed from IPC schema bytes the R6 object may
+    # only carry the base "DataType" class (not the specialised "Utf8" subclass),
+    # so inherits() and pointer-based == both give false negatives.
+    # arrow::Type$STRING == utf8 (13), arrow::Type$LARGE_STRING == large_utf8 (31).
+    type_id <- col$type$id
+    if (type_id != arrow::Type$STRING && type_id != arrow::Type$LARGE_STRING) next
+    # Fast path: Arrow C++ string → date32 cast.
+    # Slow-path fallback for versions that need an explicit format hint: convert
+    # to R character, parse with as.Date(), and re-encode as Arrow date32.
+    casted <- tryCatch(
+      col$cast(arrow::date32()),
+      error = function(e) {
+        vals <- tryCatch(col$as_vector(), error = function(e2) NULL)
+        if (is.null(vals)) return(NULL)
+        dates <- suppressWarnings(as.Date(vals))
+        if (any(is.na(dates) & !is.na(vals))) return(NULL)  # non-date strings — skip
+        tryCatch(
+          arrow::as_chunked_array(dates, type = arrow::date32()),
+          error = function(e2) NULL
+        )
+      }
+    )
     if (!is.null(casted)) {
       tbl <- tbl$set_column(i, tbl$schema$field(i)$name, casted)
     }
