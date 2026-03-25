@@ -88,7 +88,7 @@ write_dataframe <- function(client, datasource, table_name, data_frame,
     
   }, error = function(e) {
     # Check for cleanup-related errors
-    if (grepl("failed to clean up table", e$message, ignore.case = TRUE)) {
+    if (isTRUE(grepl("failed to clean up table", conditionMessage(e), ignore.case = TRUE))) {
       warning("Partial data may exist due to failed write operation")
     }
     
@@ -530,47 +530,47 @@ table_query <- function(client, datasource, table_name, override = list()) {
       }
       
       query_obj$select(columns)
-      return(result)
+      invisible(result)
     },
-    
+
     # Method to filter results
     filter = function(condition) {
       if (!is.character(condition) || length(condition) != 1) {
         stop("condition must be a single character string containing SQL WHERE condition")
       }
-      
+
       query_obj$filter(condition)
-      return(result)
+      invisible(result)
     },
-    
+
     # Method to order results
     order_by = function(order) {
       if (!is.character(order) || length(order) != 1) {
         stop("order must be a single character string containing SQL ORDER BY expression")
       }
-      
+
       query_obj$order_by(order)
-      return(result)
+      invisible(result)
     },
-    
+
     # Method to limit results
     limit = function(limit) {
       if (!is.numeric(limit) || length(limit) != 1 || limit < 1) {
         stop("limit must be a positive integer")
       }
-      
+
       query_obj$limit(as.integer(limit))
-      return(result)
+      invisible(result)
     },
-    
+
     # Method to set offset
     offset = function(offset) {
       if (!is.numeric(offset) || length(offset) != 1 || offset < 0) {
         stop("offset must be a non-negative integer")
       }
-      
+
       query_obj$offset(as.integer(offset))
-      return(result)
+      invisible(result)
     },
     
     # Method to execute the query and return all results
@@ -857,6 +857,9 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
       
       cat("SQL debugging enabled for R session\n")
     } else {
+      logging <- reticulate::import("logging")
+      domino_logger <- logging$getLogger("domino_data.data_sources")
+      domino_logger$setLevel(logging$WARNING)
       cat("SQL debugging disabled\n")
     }
     
@@ -915,7 +918,9 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
   # or it will error. Mirrors the old .prepare_dataframe_for_python() fallbacks.
   for (col in names(data_frame)) {
     x <- data_frame[[col]]
-    if (inherits(x, "difftime")) {
+    if (is.logical(x)) {
+      data_frame[[col]] <- as.integer(x)           # DB2 has no BOOLEAN; use 0/1 integer
+    } else if (inherits(x, "difftime")) {
       data_frame[[col]] <- as.numeric(x)          # duration → seconds
     } else if (is.complex(x) || is.raw(x)) {
       data_frame[[col]] <- as.character(x)         # no Arrow analogue → string
