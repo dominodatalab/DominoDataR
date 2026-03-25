@@ -873,6 +873,24 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
 # HELPER FUNCTIONS (Internal)
 # =============================================================================
 
+# Some ADBC/JDBC backends (DB2 included) return DATE columns as Arrow utf8
+# strings ("YYYY-MM-DD") instead of date32.  Arrow can cast them cleanly; if
+# the cast fails (the column contains real strings) the column is left as-is.
+.cast_string_date_cols <- function(tbl) {
+  for (i in seq_len(tbl$num_columns) - 1L) {
+    col <- tbl$column(i)
+    if (col$type != arrow::utf8() && col$type != arrow::large_utf8()) next
+    casted <- tryCatch(
+      arrow::cast(col, arrow::date32()),
+      error = function(e) NULL
+    )
+    if (!is.null(casted)) {
+      tbl <- tbl$set_column(i, tbl$schema$field(i)$name, casted)
+    }
+  }
+  tbl
+}
+
 # Portable Python-None test.  .py_is_none() is not exported in all
 # versions.  Python None auto-converts to R NULL when convert=TRUE; when
 # convert=FALSE (e.g. pyarrow objects) it stays as a Python object whose class

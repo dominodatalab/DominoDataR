@@ -56,5 +56,5 @@ query <- function(client, datasource, query, override = list()) {
     reticulate::dict(override),
     reticulate::dict(credentials)
   )
-  result$reader$to_reader()$read_table()
+  .cast_string_date_cols(result$reader$to_reader()$read_table())
 }
