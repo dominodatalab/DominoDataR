@@ -909,7 +909,18 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
   }
 
   arrow_table <- arrow::as_arrow_table(data_frame)
-  py_df <- reticulate::r_to_py(arrow_table)$to_pandas()
+
+  # Serialize to Arrow IPC stream bytes in R (pure C++, ~microseconds), then
+  # deserialize in Python via PyArrow (also pure C++).  This is faster and
+  # more portable than reticulate::r_to_py(arrow_table): if the arrow R package
+  # hasn't registered an r_to_py S3 method for ArrowTabular (version-dependent),
+  # reticulate falls back to generic R6 object introspection which takes ~10s
+  # regardless of data size.
+  ipc_bytes <- arrow::write_to_raw(arrow_table, format = "stream")
+  pyarrow <- reticulate::import("pyarrow", convert = FALSE)
+  py_df <- pyarrow$ipc$open_stream(
+    reticulate::r_to_py(ipc_bytes)
+  )$read_all()$to_pandas()
 
   # R factors arrive as pandas Categorical (Arrow dictionary encoding).
   # Cast to plain object dtype — all DB writers, including DoPut, expect strings.
@@ -937,19 +948,25 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
   py_df
 }
 
-#' Convert pandas DataFrame to R data.frame with proper type handling
+#' Convert pandas DataFrame to R data.frame via Arrow IPC
 #' @param py_df Python pandas DataFrame
 #' @return R data.frame
 #' @keywords internal
 .convert_pandas_to_r <- function(py_df) {
-  # reticulate::py_to_r handles pandas datetime64 → POSIXct and all numeric
-  # types natively.  The previous heuristic that scanned one sample value to
-  # decide whether to cast a whole column to POSIXct was fragile: any string
-  # column whose first non-NA value happened to start with YYYY-MM-DD would be
-  # silently coerced, replacing unparseable values with NA.  Removed — string
-  # columns that contain date strings remain character; callers can parse
-  # explicitly with as.POSIXct() if needed.
-  reticulate::py_to_r(py_df)
+  # Mirror of .r_df_to_pandas(): use Arrow IPC as the bridge rather than
+  # reticulate::py_to_r(pandas_df), which converts object-dtype columns
+  # element-by-element and can be slow for large result sets.
+  # pandas → PyArrow Table → IPC bytes → R Arrow Table → R data.frame.
+  pyarrow  <- reticulate::import("pyarrow", convert = FALSE)
+  py_table <- pyarrow$Table$from_pandas(py_df)
+  sink     <- pyarrow$BufferOutputStream()
+  writer   <- pyarrow$ipc$new_stream(sink, py_table$schema)
+  writer$write_table(py_table)
+  writer$close()
+  ipc_buf  <- sink$getvalue()$to_pybytes()
+  as.data.frame(
+    arrow::read_ipc_stream(reticulate::py_to_r(ipc_buf))
+  )
 }
 
 #' Convert pandas Series to R vector with proper type handling
