@@ -356,7 +356,7 @@ get_db_type_override <- function(client, datasource, override = list()) {
   # Get database type override
   tryCatch({
     result <- ds_obj$get_db_type_override()
-    if (reticulate::py_is_none(result)) {
+    if (.py_is_none(result)) {
       return(NULL)
     } else {
       return(as.character(result))
@@ -587,7 +587,7 @@ table_query <- function(client, datasource, table_name, override = list()) {
     first = function() {
       tryCatch({
         py_result <- query_obj$first()
-        if (!reticulate::py_is_none(py_result)) {
+        if (!.py_is_none(py_result)) {
           return(.convert_pandas_series_to_r(py_result))
         } else {
           return(NULL)
@@ -873,6 +873,12 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
 # HELPER FUNCTIONS (Internal)
 # =============================================================================
 
+# Portable Python-None test.  .py_is_none() is not exported in all
+# versions.  Python None auto-converts to R NULL when convert=TRUE; when
+# convert=FALSE (e.g. pyarrow objects) it stays as a Python object whose class
+# is "python.builtin.NoneType".  Covering both cases makes this safe everywhere.
+.py_is_none <- function(x) is.null(x) || inherits(x, "python.builtin.NoneType")
+
 #' Convert an R data.frame to a Python pandas DataFrame via Arrow
 #'
 #' Uses the Arrow C Data Interface for near-zero-copy transfer between R and
@@ -940,7 +946,7 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
     # tz_convert() raises TypeError on tz-naive columns (e.g. POSIXct with tz="").
     # Guard: only strip tz if the column actually carries timezone information.
     tz_val <- tryCatch(py_df[[col]]$dtype$tz, error = function(e) NULL)
-    if (!is.null(tz_val) && !reticulate::py_is_none(tz_val)) {
+    if (!is.null(tz_val) && !.py_is_none(tz_val)) {
       py_df[[col]] <- py_df[[col]]$dt$tz_convert("UTC")$dt$tz_localize(reticulate::py_none())
     }
   }
