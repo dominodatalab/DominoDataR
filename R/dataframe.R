@@ -919,7 +919,7 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
       }
     )
     if (!is.null(casted)) {
-      tbl <- tbl$set_column(i, tbl$schema$field(i)$name, casted)
+      tbl <- tbl$SetColumn(i, tbl$schema$field(i)$name, casted)
     }
   }
   tbl
