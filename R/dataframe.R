@@ -594,35 +594,51 @@ table_query <- function(client, datasource, table_name, override = list()) {
   return(result)
 }
 
-#' Wrap a query for database passthrough
+#' Wrap a query for Starburst/Trino passthrough
 #'
-#' Wraps a SQL query in Trino's \code{system.query()} table function for
-#' passthrough execution on the legacy Starburst/Trino connector
-#' (\code{DB2Config}). This is \strong{not supported} on the native DB2
-#' connector (\code{DB2NativeConfig}) — calling this function with a native
-#' DB2 datasource will raise an error. Native DB2 users should use [query()]
-#' directly, as all DB2-native SQL functions are available without a
-#' passthrough wrapper.
+#' \strong{Legacy Starburst/Trino connector (\code{DB2Config}) only.}
+#'
+#' Wraps a SQL query in Trino's \code{system.query()} table function so that
+#' DB2-native syntax that Trino cannot parse is forwarded verbatim to the
+#' underlying DB2 engine.
+#'
+#' \strong{Do not use with the native DB2 connector (\code{DB2NativeConfig}).}
+#' It will raise an error — there is no Trino layer to wrap.  On
+#' \code{DB2NativeConfig} the full DB2 SQL dialect is available directly via
+#' [query()] without any wrapper.
+#'
+#' @section Which function to use:
+#' \describe{
+#'   \item{DB2NativeConfig (native DB2)}{[query()] — submit DB2 SQL directly.}
+#'   \item{DB2Config (legacy Starburst/Trino)}{[query()] for SQL Trino can
+#'     parse; \code{wrap_passthrough_query()} + [query()] (or
+#'     [passthrough_query()] in one step) for DB2-specific syntax Trino would
+#'     reject.}
+#' }
 #'
 #' @param client As returned by [datasource_client()]
-#' @param datasource The name of the datasource
-#' @param query SQL query to wrap
+#' @param datasource The name of the \code{DB2Config} (Starburst/Trino) datasource
+#' @param query SQL query to wrap inside \code{system.query()}
 #' @param override Configuration values to override ([add_override()])
 #'
-#' @return Wrapped query string
+#' @return The wrapped query string, suitable for passing to [query()]
 #' @export
-#' @seealso \code{\link{passthrough_query}} for executing wrapped queries directly, \code{\link{query}} for standard queries
+#' @seealso [passthrough_query()] to wrap and execute in one call,
+#'   [query()] for the recommended direct-query path on all connectors
 #' @examples
 #' \dontrun{
 #' client <- datasource_client()
 #'
-#' # Wrap a complex query for inspection (Starburst/Trino only)
+#' # Starburst/Trino connector only — wrap DB2-specific syntax for inspection
 #' complex_query <- "SELECT * FROM my_table u JOIN orders o ON u.id = o.user_id ORDER BY u.created_date"
 #' wrapped <- wrap_passthrough_query(client, "my_starburst_datasource", complex_query)
 #' print(wrapped)
 #'
-#' # Then execute manually
+#' # Then execute the wrapped query
 #' result <- query(client, "my_starburst_datasource", wrapped)
+#'
+#' # On DB2NativeConfig — use query() directly instead:
+#' # result <- query(client, "my_db2native_datasource", complex_query)
 #' }
 wrap_passthrough_query <- function(client, datasource, query, override = list()) {
   # Input validation
@@ -642,34 +658,49 @@ wrap_passthrough_query <- function(client, datasource, query, override = list())
   })
 }
 
-#' Execute a query with database passthrough wrapper
+#' Execute a query with Starburst/Trino passthrough
 #'
-#' Wraps and executes a SQL query using Trino's \code{system.query()} table
-#' function. Only applicable to the legacy Starburst/Trino connector
-#' (\code{DB2Config}). This is \strong{not supported} on the native DB2
-#' connector (\code{DB2NativeConfig}) — calling this function with a native
-#' DB2 datasource will raise an error. Native DB2 users should use [query()]
-#' directly.
+#' \strong{Legacy Starburst/Trino connector (\code{DB2Config}) only.}
+#'
+#' Wraps a SQL query in Trino's \code{system.query()} table function and
+#' executes it in a single call.  Use this when running against the legacy
+#' Starburst/Trino connector and the query contains DB2-native syntax that
+#' Trino cannot parse directly.
+#'
+#' \strong{Do not use with the native DB2 connector (\code{DB2NativeConfig}).}
+#' It will raise an error immediately.  On \code{DB2NativeConfig} use
+#' [query()] directly — the complete DB2 SQL dialect (window functions,
+#' CTEs, FETCH FIRST, MERGE, special registers, etc.) is fully supported
+#' without any passthrough wrapper.
+#'
+#' @section Which function to use:
+#' \describe{
+#'   \item{DB2NativeConfig (native DB2)}{[query()] for SELECT/VALUES/WITH;
+#'     [execute_statement()] for DDL and DML (INSERT/UPDATE/DELETE/MERGE).}
+#'   \item{DB2Config (legacy Starburst/Trino)}{[query()] for standard SQL;
+#'     \code{passthrough_query()} for DB2-specific syntax Trino would reject.}
+#' }
 #'
 #' @param client As returned by [datasource_client()]
-#' @param datasource The name of the datasource
-#' @param query SQL query to execute with passthrough
+#' @param datasource The name of the \code{DB2Config} (Starburst/Trino) datasource
+#' @param query SQL query to wrap inside \code{system.query()} and execute
 #' @param override Configuration values to override ([add_override()])
 #'
-#' @return Query result as data.frame
+#' @return Query result as a data.frame
 #' @export
-#' @seealso \code{\link{wrap_passthrough_query}} for getting wrapped query strings, \code{\link{query}} for standard queries, \code{\link{table_query}} for fluent queries
+#' @seealso [wrap_passthrough_query()] to obtain the wrapped query string without
+#'   executing it, [query()] for the recommended direct-query path on all
+#'   connectors, [execute_statement()] for DML on DB2NativeConfig
 #' @examples
 #' \dontrun{
 #' client <- datasource_client()
 #'
-#' # Execute complex query with passthrough (Starburst/Trino only)
+#' # Starburst/Trino connector only — DB2-native syntax via passthrough
 #' complex_query <- "SELECT * FROM my_table u JOIN orders o ON u.id = o.user_id ORDER BY u.created_date"
 #' result <- passthrough_query(client, "my_starburst_datasource", complex_query)
 #'
-#' # Use data source-specific functions via passthrough
-#' db_specific <- "SELECT user_id, REGEXP_EXTRACT(email, '@(.*)') as domain FROM my_table"
-#' result <- passthrough_query(client, "my_starburst_datasource", db_specific)
+#' # On DB2NativeConfig — use query() directly instead:
+#' # result <- as.data.frame(query(client, "my_db2native_datasource", complex_query))
 #' }
 passthrough_query <- function(client, datasource, query, override = list()) {
   # Input validation
