@@ -937,30 +937,14 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
 #' @return R data.frame
 #' @keywords internal
 .convert_pandas_to_r <- function(py_df) {
-  # Convert pandas DataFrame to R with enhanced type handling
-  r_df <- reticulate::py_to_r(py_df)
-  
-  # Post-process columns for better R compatibility
-  for (col_name in names(r_df)) {
-    col <- r_df[[col_name]]
-    
-    # Try to parse datetime strings back to POSIXct
-    if (is.character(col) && length(col) > 0) {
-      # Check if it looks like a datetime
-      sample_val <- col[!is.na(col)][1]
-      if (!is.na(sample_val) && grepl("^\\d{4}-\\d{2}-\\d{2}", sample_val)) {
-        parsed_date <- tryCatch({
-          as.POSIXct(col, format = "%Y-%m-%d %H:%M:%S")
-        }, error = function(e) NULL)
-        
-        if (!is.null(parsed_date) && sum(!is.na(parsed_date)) > 0) {
-          r_df[[col_name]] <- parsed_date
-        }
-      }
-    }
-  }
-  
-  return(r_df)
+  # reticulate::py_to_r handles pandas datetime64 → POSIXct and all numeric
+  # types natively.  The previous heuristic that scanned one sample value to
+  # decide whether to cast a whole column to POSIXct was fragile: any string
+  # column whose first non-NA value happened to start with YYYY-MM-DD would be
+  # silently coerced, replacing unparseable values with NA.  Removed — string
+  # columns that contain date strings remain character; callers can parse
+  # explicitly with as.POSIXct() if needed.
+  reticulate::py_to_r(py_df)
 }
 
 #' Convert pandas Series to R vector with proper type handling
