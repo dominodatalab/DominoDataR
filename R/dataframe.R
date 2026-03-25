@@ -356,7 +356,7 @@ get_db_type_override <- function(client, datasource, override = list()) {
   # Get database type override
   tryCatch({
     result <- ds_obj$get_db_type_override()
-    if (reticulate::py_is_null_xptr(result)) {
+    if (reticulate::py_is_none(result)) {
       return(NULL)
     } else {
       return(as.character(result))
@@ -587,7 +587,7 @@ table_query <- function(client, datasource, table_name, override = list()) {
     first = function() {
       tryCatch({
         py_result <- query_obj$first()
-        if (!reticulate::py_is_null_xptr(py_result)) {
+        if (!reticulate::py_is_none(py_result)) {
           return(.convert_pandas_series_to_r(py_result))
         } else {
           return(NULL)
@@ -889,6 +889,25 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
 #' @return Python pandas DataFrame
 #' @keywords internal
 .r_df_to_pandas <- function(data_frame) {
+  # Pre-process types Arrow cannot represent — must happen before as_arrow_table()
+  # or it will error. Mirrors the old .prepare_dataframe_for_python() fallbacks.
+  for (col in names(data_frame)) {
+    x <- data_frame[[col]]
+    if (inherits(x, "difftime")) {
+      data_frame[[col]] <- as.numeric(x)          # duration → seconds
+    } else if (is.complex(x) || is.raw(x)) {
+      data_frame[[col]] <- as.character(x)         # no Arrow analogue → string
+    } else if (is.list(x) && !is.data.frame(x)) {
+      data_frame[[col]] <- vapply(x, function(v) {
+        if (is.null(v)) NA_character_
+        else tryCatch(
+          jsonlite::toJSON(v, auto_unbox = TRUE),
+          error = function(e) as.character(v)
+        )
+      }, character(1L))
+    }
+  }
+
   arrow_table <- arrow::as_arrow_table(data_frame)
   py_df <- reticulate::r_to_py(arrow_table)$to_pandas()
 
