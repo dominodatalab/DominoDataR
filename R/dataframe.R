@@ -864,11 +864,13 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
 .cast_string_date_cols <- function(tbl) {
   for (i in seq_len(tbl$num_columns) - 1L) {
     col <- tbl$column(i)
-    if (col$type != arrow::utf8() && col$type != arrow::large_utf8()) next
-    casted <- tryCatch(
-      arrow::cast(col, arrow::date32()),
-      error = function(e) NULL
-    )
+    # Use inherits() on the R6 type class rather than != / == operator overloads,
+    # which fall back to pointer comparison in some arrow R package versions and
+    # therefore always return TRUE (skipping every column).
+    if (!inherits(col$type, c("Utf8", "LargeUtf8"))) next
+    # Use the R6 $cast() method directly rather than the arrow::cast() generic,
+    # which dispatches through S3 and may not handle ChunkedArray in all versions.
+    casted <- tryCatch(col$cast(arrow::date32()), error = function(e) NULL)
     if (!is.null(casted)) {
       tbl <- tbl$set_column(i, tbl$schema$field(i)$name, casted)
     }
