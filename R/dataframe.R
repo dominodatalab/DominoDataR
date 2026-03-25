@@ -899,6 +899,17 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
     py_df[[col]] <- py_df[[col]]$astype("object")
   }
 
+  # Arrow converts R POSIXct → timestamp[us, UTC] → pandas datetime64[us, UTC]
+  # (timezone-aware).  DB2 TIMESTAMP columns are timezone-naive, so DoPut fails
+  # with a schema mismatch and falls back to slow row-by-row INSERT.
+  # Fix: convert to UTC then strip the timezone, giving datetime64[us] (tz-naive).
+  datetime_cols <- names(data_frame)[
+    vapply(data_frame, function(x) inherits(x, c("POSIXct", "POSIXlt")), logical(1L))
+  ]
+  for (col in datetime_cols) {
+    py_df[[col]] <- py_df[[col]]$dt$tz_convert("UTC")$dt$tz_localize(reticulate::py_none())
+  }
+
   py_df
 }
 
