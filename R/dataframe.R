@@ -53,7 +53,7 @@ write_dataframe <- function(client, datasource, table_name, data_frame,
   }
   
   # Get the datasource object
-  ds_obj <- client$get_datasource(datasource)
+  ds_obj <- .cached_get_datasource(client, datasource)
 
   # Convert R → Arrow → pandas (zero-copy via Arrow C Data Interface)
   py_df <- .r_df_to_pandas(data_frame)
@@ -125,7 +125,7 @@ calculate_optimal_chunk_size <- function(client, datasource, data_frame,
   }
   
   # Get the datasource object
-  ds_obj <- client$get_datasource(datasource)
+  ds_obj <- .cached_get_datasource(client, datasource)
   
   py_df <- .r_df_to_pandas(data_frame)
 
@@ -171,7 +171,7 @@ estimate_message_size <- function(client, datasource, data_frame, chunk_size, ov
   }
   
   # Get the datasource object
-  ds_obj <- client$get_datasource(datasource)
+  ds_obj <- .cached_get_datasource(client, datasource)
   
   py_df <- .r_df_to_pandas(data_frame)
 
@@ -209,7 +209,7 @@ set_grpc_message_limits <- function(client, datasource, max_message_size_mb = 64
   }
   
   # Get the datasource object
-  ds_obj <- client$get_datasource(datasource)
+  ds_obj <- .cached_get_datasource(client, datasource)
   
   # Call the Python set_grpc_message_limits method
   tryCatch({
@@ -246,7 +246,7 @@ table_exists <- function(client, datasource, table_name, override = list()) {
   }
   
   # Get the datasource object
-  ds_obj <- client$get_datasource(datasource)
+  ds_obj <- .cached_get_datasource(client, datasource)
   
   # Check if table exists
   tryCatch({
@@ -274,7 +274,7 @@ table_exists <- function(client, datasource, table_name, override = list()) {
 #' }
 get_db_type <- function(client, datasource, override = list()) {
   # Get the datasource object
-  ds_obj <- client$get_datasource(datasource)
+  ds_obj <- .cached_get_datasource(client, datasource)
   
   # Get database type
   tryCatch({
@@ -312,7 +312,7 @@ set_db_type_override <- function(client, datasource, db_type, override = list())
   }
   
   # Get the datasource object
-  ds_obj <- client$get_datasource(datasource)
+  ds_obj <- .cached_get_datasource(client, datasource)
   
   # Set database type override
   tryCatch({
@@ -351,7 +351,7 @@ set_db_type_override <- function(client, datasource, db_type, override = list())
 #' }
 get_db_type_override <- function(client, datasource, override = list()) {
   # Get the datasource object
-  ds_obj <- client$get_datasource(datasource)
+  ds_obj <- .cached_get_datasource(client, datasource)
   
   # Get database type override
   tryCatch({
@@ -383,7 +383,7 @@ get_db_type_override <- function(client, datasource, override = list()) {
 #' }
 get_supported_db_types <- function(client, datasource, override = list()) {
   # Get the datasource object
-  ds_obj <- client$get_datasource(datasource)
+  ds_obj <- .cached_get_datasource(client, datasource)
   
   # Get supported database types
   tryCatch({
@@ -416,7 +416,7 @@ drop_table_quietly <- function(client, datasource, table_name, override = list()
   }
   
   # Get the datasource object
-  ds_obj <- client$get_datasource(datasource)
+  ds_obj <- .cached_get_datasource(client, datasource)
   
   # Call the Python _drop_table_quietly method
   tryCatch({
@@ -468,7 +468,7 @@ execute_statement <- function(client, datasource, sql, override = list()) {
     stop("sql must be a single character string")
   }
 
-  ds_obj <- client$get_datasource(datasource)
+  ds_obj <- .cached_get_datasource(client, datasource)
 
   tryCatch({
     ds_obj$execute_statement(sql)
@@ -516,7 +516,7 @@ table_query <- function(client, datasource, table_name, override = list()) {
   }
   
   # Get the datasource object
-  ds_obj <- client$get_datasource(datasource)
+  ds_obj <- .cached_get_datasource(client, datasource)
   
   # Create the TableQuery object
   query_obj <- ds_obj$table(table_name)
@@ -647,7 +647,7 @@ wrap_passthrough_query <- function(client, datasource, query, override = list())
   }
   
   # Get the datasource object
-  ds_obj <- client$get_datasource(datasource)
+  ds_obj <- .cached_get_datasource(client, datasource)
   
   # Wrap the query
   tryCatch({
@@ -694,7 +694,7 @@ passthrough_query <- function(client, datasource, query, override = list()) {
   }
   
   # Get the datasource object
-  ds_obj <- client$get_datasource(datasource)
+  ds_obj <- .cached_get_datasource(client, datasource)
   
   # Execute passthrough query
   tryCatch({
@@ -738,7 +738,7 @@ register_type <- function(client, datasource, r_type, sql_type, override = list(
   }
   
   # Get the datasource object
-  ds_obj <- client$get_datasource(datasource)
+  ds_obj <- .cached_get_datasource(client, datasource)
   
   # Enhanced R type to Python type mapping
   py_types <- .get_python_type_mappings()
@@ -783,7 +783,7 @@ register_type <- function(client, datasource, r_type, sql_type, override = list(
 #' }
 get_type_mappings <- function(client, datasource, override = list()) {
   # Get the datasource object
-  ds_obj <- client$get_datasource(datasource)
+  ds_obj <- .cached_get_datasource(client, datasource)
   
   # Get type mappings
   tryCatch({
@@ -833,7 +833,7 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
   }
   
   # Get the datasource object
-  ds_obj <- client$get_datasource(datasource)
+  ds_obj <- .cached_get_datasource(client, datasource)
   
   # Enable or disable SQL debugging
   tryCatch({

@@ -41,6 +41,24 @@
 #'
 #' @seealso [query()], [write_dataframe()], [execute_statement()]
 #' @export
+#' Cached wrapper around client$get_datasource()
+#'
+#' @details Internal. Calls `client$get_datasource(name)` once per datasource
+#'   name per session and returns the cached result on subsequent calls,
+#'   avoiding repeated 10–15 s HTTP round-trips.
+#' @param client A datasource client as returned by [datasource_client()].
+#' @param datasource Datasource name (character) or already-resolved object.
+#' @return The resolved datasource object.
+#' @keywords internal
+.cached_get_datasource <- function(client, datasource) {
+  if (!is.character(datasource)) return(datasource)
+  if (!exists(datasource, envir = .ds_cache, inherits = FALSE)) {
+    assign(datasource, client$get_datasource(datasource), envir = .ds_cache)
+  }
+  .ds_cache[[datasource]]
+}
+
+
 datasource_client <- function(api_key = NULL, token_file = NULL, token_url = NULL, token =  NULL) {
   envvar <- c("DOMINO_CLIENT_SOURCE" = "R")
   if (!is.null(api_key) || !is.null(token_file) || !is.null(token_url) || !is.null(token)) {

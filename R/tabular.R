@@ -48,7 +48,7 @@
 #'   query interface, [execute_statement()] for DDL/DML, [write_dataframe()] for writes
 #' @export
 query <- function(client, datasource, query, override = list()) {
-  datasource <- client$get_datasource(datasource)
+  datasource <- .cached_get_datasource(client, datasource)
   credentials <- DominoDataR::add_credentials(datasource$auth_type, override)
   result <- client$execute(
     datasource$identifier,
