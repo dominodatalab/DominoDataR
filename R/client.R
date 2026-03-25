@@ -69,10 +69,13 @@ datasource_client <- function(api_key = NULL, token_file = NULL, token_url = NUL
 #' @keywords internal
 .cached_get_datasource <- function(client, datasource) {
   if (!is.character(datasource)) return(datasource)
-  if (!exists(datasource, envir = .ds_cache, inherits = FALSE)) {
-    assign(datasource, client$get_datasource(datasource), envir = .ds_cache)
+  # Prefix with the Python object id so two clients that share a datasource
+  # name (e.g. pointing to different Domino environments) never collide.
+  cache_key <- paste0(reticulate::py_id(client), ":", datasource)
+  if (!exists(cache_key, envir = .ds_cache, inherits = FALSE)) {
+    assign(cache_key, client$get_datasource(datasource), envir = .ds_cache)
   }
-  .ds_cache[[datasource]]
+  .ds_cache[[cache_key]]
 }
 
 

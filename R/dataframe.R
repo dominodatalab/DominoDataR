@@ -60,32 +60,16 @@ write_dataframe <- function(client, datasource, table_name, data_frame,
   
   # Call the Python write_dataframe method with new parameters
   tryCatch({
-    if (is.null(chunk_size)) {
-      # Use auto-optimization
-      ds_obj$write_dataframe(
-        table_name = table_name,
-        dataframe = py_df,
-        if_table_exists = if_table_exists,
-        chunksize = reticulate::py_none(),
-        handle_mixed_types = handle_mixed_types,
-        force = force,
-        auto_optimize_chunks = auto_optimize_chunks,
-        max_message_size_mb = max_message_size_mb
-      )
-    } else {
-      # Use manual chunk size
-      ds_obj$write_dataframe(
-        table_name = table_name,
-        dataframe = py_df,
-        if_table_exists = if_table_exists,
-        chunksize = as.integer(chunk_size),
-        handle_mixed_types = handle_mixed_types,
-        force = force,
-        auto_optimize_chunks = auto_optimize_chunks,
-        max_message_size_mb = max_message_size_mb
-      )
-    }
-    
+    ds_obj$write_dataframe(
+      table_name          = table_name,
+      dataframe           = py_df,
+      if_table_exists     = if_table_exists,
+      chunksize           = if (is.null(chunk_size)) reticulate::py_none() else as.integer(chunk_size),
+      handle_mixed_types  = handle_mixed_types,
+      force               = force,
+      auto_optimize_chunks = auto_optimize_chunks,
+      max_message_size_mb = max_message_size_mb
+    )
   }, error = function(e) {
     # Check for cleanup-related errors
     if (isTRUE(grepl("failed to clean up table", conditionMessage(e), ignore.case = TRUE))) {
