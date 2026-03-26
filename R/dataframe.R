@@ -910,8 +910,10 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
       error = function(e) {
         vals <- tryCatch(col$as_vector(), error = function(e2) NULL)
         if (is.null(vals)) return(NULL)
-        dates <- suppressWarnings(as.Date(vals))
-        if (any(is.na(dates) & !is.na(vals))) return(NULL)  # non-date strings — skip
+        # as.Date() throws an error (not a warning) on clearly non-date strings;
+        # catch it so we fall through and leave the column as-is.
+        dates <- tryCatch(suppressWarnings(as.Date(vals)), error = function(e2) NULL)
+        if (is.null(dates) || any(is.na(dates) & !is.na(vals))) return(NULL)
         tryCatch(
           arrow::as_chunked_array(dates, type = arrow::date32()),
           error = function(e2) NULL
