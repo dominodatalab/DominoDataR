@@ -1007,6 +1007,16 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
     }
   }
 
+  # Arrow converts R Date → date32 → pandas object dtype (Python datetime.date).
+  # When write_dataframe re-serialises to Arrow for DoPut it may infer object
+  # columns as timestamp[us] instead of date32, writing a TIMESTAMP with a
+  # spurious 00:00:00 time component into DB2 DATE columns.
+  # Fix: cast to datetime64[D] (day resolution, no time) so PyArrow infers date32.
+  date_cols <- names(data_frame)[vapply(data_frame, function(x) inherits(x, "Date"), logical(1L))]
+  for (col in date_cols) {
+    py_df[[col]] <- py_df[[col]]$astype("datetime64[D]")
+  }
+
   py_df
 }
 
