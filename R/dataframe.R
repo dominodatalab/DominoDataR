@@ -4,10 +4,23 @@
 #' @param datasource The name of the datasource to write to
 #' @param table_name Name of the table to write to
 #' @param data_frame Data frame containing the data to write
-#' @param if_table_exists Action to take if the table already exists: 'fail' (default), 'replace', 'append', or 'truncate'
+#' @param if_table_exists Action to take if the table already exists:
+#'   \describe{
+#'     \item{'fail'}{Raise an error (default).}
+#'     \item{'replace'}{For DB2 native datasources, truncates the table when the schema
+#'       is unchanged, or drops and recreates it when column names, order, or types differ
+#'       (e.g. TIMESTAMP to DATE). For all other datasources, always drops and recreates.}
+#'     \item{'append'}{Append rows to the existing table. For DB2 native datasources,
+#'       raises an error if column types or order differ from the existing table —
+#'       use \code{force = TRUE} to bypass and append anyway.}
+#'     \item{'truncate'}{Empty the table and refill it. For DB2 native datasources, drops
+#'       and recreates the table when column types or order have changed (e.g. TIMESTAMP
+#'       to DATE); otherwise truncates in place. Safe for fixing a stale schema.}
+#'   }
 #' @param chunk_size Number of rows to insert in each batch. If NULL, auto-optimize based on data characteristics (default: NULL)
 #' @param handle_mixed_types If TRUE (default), detect and handle mixed types in columns
-#' @param force If TRUE, attempt to append data even if schema compatibility issues are detected (default: FALSE)
+#' @param force If TRUE, skip schema compatibility and type-mismatch checks. For DB2 native
+#'   \code{append} mode, also bypasses the column type/order mismatch error (default: FALSE)
 #' @param auto_optimize_chunks If TRUE (default), automatically calculate optimal chunk size
 #' @param max_message_size_mb Maximum gRPC message size in MB for auto-optimization (default: 4.0)
 #' @param override Configuration values to override ([add_override()])
