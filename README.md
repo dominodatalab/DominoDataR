@@ -45,16 +45,15 @@ client <- datasource_client()
 
 ``` r
 # Returns an Arrow Table — use as.data.frame() or dplyr directly
-result <- query(client, "my_datasource", "SELECT * FROM my_schema.my_table")
-df <- as.data.frame(result)
+df <- as.data.frame(query(client, "my_datasource", "SELECT * FROM my_schema.my_table"))
 ```
 
 ### Writing data
 
 ``` r
 df <- data.frame(
-  id       = 1:3,
-  name     = c("Alice", "Bob", "Charlie"),
+  id        = 1:3,
+  name      = c("Alice", "Bob", "Charlie"),
   join_date = as.Date(c("2024-01-01", "2024-03-15", "2024-06-01"))
 )
 
@@ -90,6 +89,88 @@ execute_statement(client, "my_datasource",
                   "DELETE FROM MY_SCHEMA.MY_TABLE WHERE status = 'expired'")
 ```
 
+## Upgrading from an Older Version
+
+If your code uses `DominoDataSourceQuery` or `DominoDataSourceWrite`, those
+functions are from an older version of DominoDataR and are no longer available.
+The current package uses `query()` and `write_dataframe()` with an explicit
+`client` object.
+
+### Step 1 — Update the package
+
+``` r
+install.packages("remotes")
+remotes::install_github("dominodatalab/DominoDataR")
+DominoDataR::py_domino_data_install()
+```
+
+### Step 2 — Update your code
+
+**Reading data:**
+
+``` r
+# Old (no longer works)
+df <- DominoDataSourceQuery("MY_DATASOURCE", "SELECT * FROM my_schema.my_table")
+
+# New
+library(DominoDataR)
+client <- datasource_client()
+df <- as.data.frame(query(client, "MY_DATASOURCE", "SELECT * FROM my_schema.my_table"))
+```
+
+**Writing data:**
+
+``` r
+# Old (no longer works)
+DominoDataSourceWrite("MY_DATASOURCE", "MY_SCHEMA.MY_TABLE", df,
+                      if_table_exists = "replace")
+
+# New
+library(DominoDataR)
+client <- datasource_client()
+write_dataframe(client, "MY_DATASOURCE", "MY_SCHEMA.MY_TABLE", df,
+                if_table_exists = "replace")
+```
+
+The `client` object can be created once per session and reused across multiple
+read and write calls.
+
+### Complete example
+
+``` r
+library(DominoDataR)
+
+client <- datasource_client()
+
+# Write
+df <- data.frame(
+  id        = 1:3,
+  name      = c("Alice", "Bob", "Charlie"),
+  join_date = as.Date(c("2024-01-01", "2024-03-15", "2024-06-01"))
+)
+write_dataframe(client, "MY_DATASOURCE", "MY_SCHEMA.MY_TABLE", df,
+                if_table_exists = "replace")
+
+# Read back
+df_back <- as.data.frame(query(client, "MY_DATASOURCE",
+                               "SELECT * FROM MY_SCHEMA.MY_TABLE"))
+```
+
+### Note on R `Date` columns and DB2
+
+R `Date` columns are written as DB2 `DATE` (not `TIMESTAMP`). This means
+dates round-trip correctly regardless of the session timezone — there is no
+`+2h` shift in CEST or other UTC-offset sessions.
+
+If you have an existing table where a `Date` column was written as DB2
+`TIMESTAMP` by an older version of the package, rewrite it with
+`if_table_exists = "replace"` to fix the schema automatically:
+
+``` r
+write_dataframe(client, "MY_DATASOURCE", "MY_SCHEMA.MY_TABLE", df,
+                if_table_exists = "replace")
+```
+
 ## Column Type Mapping
 
 R types are mapped to database types automatically:
@@ -103,9 +184,6 @@ R types are mapped to database types automatically:
 | `Date` | `DATE` |
 | `POSIXct` / `POSIXlt` | `TIMESTAMP` |
 | `factor` | `VARCHAR` |
-
-`Date` columns are stored as DB2 `DATE` (not `TIMESTAMP`) and round-trip
-without any timezone shift, regardless of the session timezone.
 
 ## DB2 Native vs Legacy Starburst/Trino
 
@@ -125,60 +203,33 @@ result <- passthrough_query(
 )
 ```
 
-## Migrating from the Old API
+## Troubleshooting
 
-If your code uses `DominoDataSourceWrite` or `DominoDataSourceQuery`, those
-functions are from an older version of DominoDataR and are no longer available.
-Replace them as follows:
+### `Error while loading conda entry point: conda-libmamba-solver`
 
-### Reading
-
-```r
-# Old
-df <- DominoDataSourceQuery("MY_DATASOURCE", "SELECT * FROM my_schema.my_table")
-
-# New
-client <- datasource_client()
-df <- as.data.frame(query(client, "MY_DATASOURCE", "SELECT * FROM my_schema.my_table"))
+```
+Error while loading conda entry point: conda-libmamba-solver
+(module 'libmambapy' has no attribute 'QueryFormat')
 ```
 
-### Writing
+This is a version mismatch between `libmambapy` and `conda-libmamba-solver` in
+the compute environment. It prevents the Python backend from loading, which
+means DominoDataR cannot run at all.
 
-```r
-# Old
-DominoDataSourceWrite("MY_DATASOURCE", "MY_SCHEMA.MY_TABLE", df,
-                      if_table_exists = "replace")
+**Fix** — run this once in a terminal in your Domino workspace:
 
-# New
-client <- datasource_client()
-write_dataframe(client, "MY_DATASOURCE", "MY_SCHEMA.MY_TABLE", df,
-                if_table_exists = "replace")
+``` bash
+conda config --set solver classic
 ```
 
-The `client` object can be created once and reused across multiple calls in the
-same session.
+Then restart your R session. If you do not have terminal access, contact your
+Domino platform administrator to fix the base environment image.
 
-### Complete example (equivalent to old mtcars pattern)
+### `could not find function "DominoDataSourceQuery"`
 
-```r
-library(DominoDataR)
-library(dplyr)
+You are running an older version of DominoDataR. Follow the steps in
+[Upgrading from an Older Version](#upgrading-from-an-older-version) above.
 
-client <- datasource_client()
+### `could not find function "DominoDataSourceWrite"`
 
-# Prepare data
-mtcars_df <- mtcars %>%
-  mutate(
-    var_date     = lubridate::today(),   # stored as DB2 DATE
-    var_datetime = lubridate::now(),     # stored as DB2 TIMESTAMP
-    var_factor   = factor("A")
-  )
-
-# Write
-write_dataframe(client, "MY_DATASOURCE", "MY_SCHEMA.MTCARS",
-                mtcars_df, if_table_exists = "replace")
-
-# Read back
-result <- as.data.frame(query(client, "MY_DATASOURCE",
-                              "SELECT * FROM MY_SCHEMA.MTCARS"))
-```
+Same as above — see [Upgrading from an Older Version](#upgrading-from-an-older-version).
