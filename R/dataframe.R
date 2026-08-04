@@ -909,6 +909,21 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
 # Some ADBC/JDBC backends (DB2 included) return DATE columns as Arrow utf8
 # strings ("YYYY-MM-DD") instead of date32.  Arrow can cast them cleanly; if
 # the cast fails (the column contains real strings) the column is left as-is.
+#
+# Also fixes a timezone-naive TIMESTAMP shift: when arrow-R converts an Arrow
+# `timestamp` column with no timezone attached (tz = "") to a data.frame, it
+# treats the literal wall-clock digits as a UTC epoch instant and then
+# re-localizes for display in the session timezone (Sys.timezone()), adding
+# the local UTC offset (e.g. DB2 TIMESTAMP '2025-10-04 00:00:00' becomes
+# "2025-10-04 02:00:00 CEST" under TZ=Europe/Zurich). This is arrow-R's own
+# as.data.frame.Table behavior, reproducible with a bare `arrow` table and no
+# DB2/proxy/domino-data involved — DB2 TIMESTAMP has no tz semantics at all,
+# so the fix is to explicitly tag these columns as UTC before conversion:
+# round-trip through string (preserves literal digits, verified for
+# microsecond precision and year 9999) then `assume_timezone("UTC")`, which
+# attaches the tz label without altering the underlying value. A tz-tagged
+# Arrow timestamp converts to a correctly-tzoned POSIXct with no further
+# shift, matching `24f`/`24b`'s plain-read boundary tests.
 .cast_string_date_cols <- function(tbl) {
   for (i in seq_len(tbl$num_columns) - 1L) {
     col <- tbl$column(i)
@@ -918,6 +933,18 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
     # so inherits() and pointer-based == both give false negatives.
     # arrow::Type$STRING == utf8 (13), arrow::Type$LARGE_STRING == large_utf8 (31).
     type_id <- col$type$id
+
+    if (type_id == arrow::Type$TIMESTAMP && identical(col$type$timezone(), "")) {
+      fixed <- tryCatch({
+        naive_ts <- col$cast(arrow::string())$cast(arrow::timestamp(unit = col$type$unit()))
+        arrow::call_function("assume_timezone", naive_ts, options = list(timezone = "UTC"))
+      }, error = function(e) NULL)
+      if (!is.null(fixed)) {
+        tbl <- tbl$SetColumn(i, arrow::field(tbl$schema$field(i)$name, fixed$type), fixed)
+      }
+      next
+    }
+
     if (type_id != arrow::Type$STRING && type_id != arrow::Type$LARGE_STRING) next
     # Fast path: Arrow C++ string → date32 cast.
     # Slow-path fallback for versions that need an explicit format hint: convert
