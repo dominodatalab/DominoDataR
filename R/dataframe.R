@@ -81,7 +81,11 @@ write_dataframe <- function(client, datasource, table_name, data_frame,
       handle_mixed_types  = handle_mixed_types,
       force               = force,
       auto_optimize_chunks = auto_optimize_chunks,
-      max_message_size_mb = max_message_size_mb
+      max_message_size_mb = max_message_size_mb,
+      # .r_df_to_pandas() types every column natively via Arrow (date32 -> object date,
+      # POSIXct -> datetime64), so the Python client must NOT re-infer date vs timestamp
+      # from values. Without this, a genuine all-midnight POSIXct is demoted to DATE.
+      assume_typed        = TRUE
     )
   }, error = function(e) {
     # Check for cleanup-related errors
@@ -993,9 +997,16 @@ enable_sql_debug <- function(client, datasource, enabled = TRUE, override = list
   # regardless of data size.
   ipc_bytes <- arrow::write_to_raw(arrow_table, format = "stream")
   pyarrow <- reticulate::import("pyarrow", convert = FALSE)
+  # date_as_object = TRUE keeps Arrow date32 columns as Python datetime.date objects
+  # (object dtype) instead of collapsing them to datetime64, which is indistinguishable
+  # from a real timestamp. This preserves the Date-vs-POSIXct distinction end-to-end:
+  # date32 -> object date -> DB2 DATE; timestamp -> datetime64 -> DB2 TIMESTAMP. Without
+  # it, the Python client must guess "date vs timestamp" from values, and a genuine
+  # all-midnight POSIXct is wrongly demoted to DATE. Explicit for version-robustness
+  # (some pyarrow versions default this to FALSE).
   py_df <- pyarrow$ipc$open_stream(
     reticulate::r_to_py(ipc_bytes)
-  )$read_all()$to_pandas()
+  )$read_all()$to_pandas(date_as_object = TRUE)
 
   # R factors arrive as pandas Categorical (Arrow dictionary encoding).
   # Cast to plain object dtype — all DB writers, including DoPut, expect strings.
