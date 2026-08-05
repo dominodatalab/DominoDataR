@@ -30,7 +30,7 @@ list_keys <- function(client,
                       prefix = "",
                       override = list(),
                       page_size = 50) {
-  datasource <- client$get_datasource(datasource)
+  datasource <- .cached_get_datasource(client, datasource)
   credentials <- DominoDataR::add_credentials(datasource$auth_type, override)
   client$list_keys(
     datasource$identifier,
@@ -56,7 +56,7 @@ get_object <- function(client,
                        object,
                        as = "raw",
                        override = list()) {
-  datasource <- client$get_datasource(datasource)
+  datasource <- .cached_get_datasource(client, datasource)
   credentials <- DominoDataR::add_credentials(datasource$auth_type, override)
   url <- client$get_key_url(
     datasource$identifier,
@@ -88,7 +88,7 @@ save_object <- function(client,
                         object,
                         file = basename(object),
                         override = list()) {
-  datasource <- client$get_datasource(datasource)
+  datasource <- .cached_get_datasource(client, datasource)
   credentials <- DominoDataR::add_credentials(datasource$auth_type, override)
   url <- client$get_key_url(
     datasource$identifier,
@@ -134,7 +134,7 @@ put_object <- function(client,
     stop("Invalid payload of `what` - must be a raw vector or character vector")
   }
 
-  datasource <- client$get_datasource(datasource)
+  datasource <- .cached_get_datasource(client, datasource)
   credentials <- DominoDataR::add_credentials(datasource$auth_type, override)
   url <- client$get_key_url(
     datasource$identifier,
@@ -167,7 +167,7 @@ upload_object <- function(client,
                           object,
                           file,
                           override = list()) {
-  datasource <- client$get_datasource(datasource)
+  datasource <- .cached_get_datasource(client, datasource)
   credentials <- DominoDataR::add_credentials(datasource$auth_type, override)
   url <- client$get_key_url(
     datasource$identifier,

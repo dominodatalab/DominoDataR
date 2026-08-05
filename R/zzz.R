@@ -1,5 +1,6 @@
 domino_data_sources <- NULL
 netapp_volumes <- NULL
+.ds_cache <- new.env(hash = TRUE, parent = emptyenv())
 
 .onLoad <- function(libname, pkgname) {
   py_select_interpreter()

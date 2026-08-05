@@ -26,3 +26,21 @@ A \code{domino_data.data_sources.DataSourceClient}.
 \description{
 Create a client to Domino datasources
 }
+\examples{
+\dontrun{
+# Default — reads credentials from the Domino environment automatically
+client <- datasource_client()
+
+# Run a query and get the result as a data.frame
+df <- as.data.frame(query(client, "my_datasource", "SELECT * FROM my_table"))
+
+# Write a data.frame back to a table
+write_dataframe(client, "my_datasource", "my_table", df)
+
+# Execute DDL / DML that returns no result set
+execute_statement(client, "my_datasource", "TRUNCATE TABLE my_table IMMEDIATE")
+}
+}
+\seealso{
+\code{\link{query}}, \code{\link{write_dataframe}}, \code{\link{execute_statement}}
+}
